@@ -601,14 +601,16 @@ def posters(m):
         cs, ct = corner
         def curl(s, t, cs=cs, ct=ct):
             q = max(0.0, (abs(s - (1 - cs)) + abs(t - (1 - ct)) - 1.62) / 0.38)
-            lift = 0.05 * q ** 2.2
-            pull = 0.018 * q ** 2
+            # a corner that has let go of its tape by a centimetre and a half, not five: at 5 cm the wall lamps threw a
+            # hard black shadow of the flap across a quarter of the poster, which read as a hole in the print
+            lift = 0.016 * q ** 2.2
+            pull = 0.007 * q ** 2
             return (lift + 0.0004, (-pull if cs else pull) * 0.7, (pull if not ct else -pull) * 0.7)
         with kit.props(td=1.7):
             grid('poster_%d' % k, (WX, y0, z0), (0, y1 - y0, 0), (0, 0, z1 - z0), 6, 8, m['sheet'], R(reg), fn=curl, smooth=True)
-            # its paper back where the corner lifts
-            with kit.props(td=0.3): grid('poster_back%d' % k, (WX - 0.0003, y1, z0), (0, y0 - y1, 0), (0, 0, z1 - z0), 6, 6, m['paper'],
-                 fn=lambda s, t, c=curl: c(1 - s, t), smooth=True)
+            # No separate sheet for the paper's back. There used to be one 0.3 mm behind the print, but where the corner
+            # curls the quads are warped, the two sheets triangulated differently, and the unlit back poked through the
+            # front: whole grid cells of the poster baked black. With a 1.6 cm lift no camera stop can see the back anyway.
         # yellowed tape on the two top corners
         with kit.props(td=0.6):
             for j, (yy, ang) in enumerate(((y0 + 0.012, 35), (y1 - 0.012, -35))):

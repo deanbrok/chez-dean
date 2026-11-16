@@ -650,6 +650,10 @@ function updateDial() {
   let cur = null;
   stations.querySelectorAll('button').forEach((b) => { const on = b.dataset.stop === stop; b.setAttribute('aria-current', String(on)); if (on) cur = b; });
   if (cur) needle.style.transform = `translateX(${cur.offsetLeft + cur.offsetWidth / 2 - 1 + stations.offsetLeft}px)`;
+  // if the keyboard moved us (arrows, 1-6, Esc) while a station button had focus, take the focus along:
+  // otherwise the focus ring stays behind on the stop we just left
+  const f = document.activeElement;
+  if (cur && f && f !== cur && f.parentNode === stations) cur.focus({ preventScroll: true });
 }
 
 // ---------------------------------------------------------------- help, keys
