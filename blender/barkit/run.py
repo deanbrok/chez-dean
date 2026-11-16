@@ -87,6 +87,7 @@ elif cmd == 'standin':
     bpy.ops.wm.open_mainfile(filepath=f); P.sc = bpy.context.scene
     names = P.export_glb(os.path.join(P.SITE, 'bar.glb'))
     json.dump(P.scene_meta(names), open(os.path.join(P.SITE, 'scene.json'), 'w'), indent=1)
+    P.stamp()
     print('STANDIN OK')
 elif cmd == 'assemble':
     skip = (opt('--skip') or '').split(',')
@@ -112,12 +113,14 @@ elif cmd in ('bake', 'render'):
 elif cmd == 'post':
     meta = json.load(open(os.path.join(P.OUT, 'assemble.json')))
     for a in ([sys.argv[2]] if len(sys.argv) > 2 else meta['atlases']): P.post(a)
+    P.stamp()
 elif cmd == 'export':
     bpy.ops.wm.open_mainfile(filepath=os.path.join(P.OUT, 'bar.blend')); P.sc = bpy.context.scene
     meta = json.load(open(os.path.join(P.OUT, 'assemble.json')))
     P.EXTRA_LIGHTS.extend([tuple(l) for l in meta['extra_lights']])
     names = P.export_glb(os.path.join(P.SITE, 'bar.glb'))
     json.dump(P.scene_meta(names), open(os.path.join(P.SITE, 'scene.json'), 'w'), indent=1)
+    P.stamp()
     print('EXPORTED')
 else:
     print(__doc__)

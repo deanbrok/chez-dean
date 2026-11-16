@@ -295,6 +295,21 @@ def post(atlas, modes=('night',), bakedir=None, outdir=None, quality=88, size=No
         im.save(f, quality=quality, subsampling=0)
         print('POST %s  fill %.2f  mean %.1f  %d KB' % (f, (alb[..., 3] > 0).mean(), img.mean(), os.path.getsize(f) // 1024), flush=True)
 
+# ------------------------------------------------------------------ the bake's version stamp
+def stamp():
+    """writes scene.json's "v": a short hash of bar.glb + every tex/*.jpg. The page appends it to those URLs (?v=...),
+    so a browser can never pair one bake's model with another bake's textures out of its cache. Run after post / export."""
+    import hashlib, glob, json
+    f = os.path.join(SITE, 'scene.json')
+    if not os.path.exists(f): return None
+    h = hashlib.sha1()
+    for p in [os.path.join(SITE, 'bar.glb')] + sorted(glob.glob(os.path.join(SITE, 'tex', '*.jpg'))):
+        if os.path.exists(p): h.update(os.path.basename(p).encode()); h.update(open(p, 'rb').read())
+    meta = json.load(open(f)); meta['v'] = h.hexdigest()[:10]
+    json.dump(meta, open(f, 'w'), indent=1)
+    print('STAMP', meta['v'], flush=True)
+    return meta['v']
+
 # ------------------------------------------------------------------ export
 def export_glb(path, only=None):
     """strips to geometry + uv_atlas, one material per atlas (named like the atlas), writes a plain GLB"""
