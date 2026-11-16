@@ -1,8 +1,8 @@
 """COUNTER part: the mahogany bar counter, foot rail, four stools, four pendants, the brass counter lamp and the still life
-on the counter (whisky, the second drink, ashtray + cigar, the owner's note, matchbook, cigar box, paperback, peanuts...),
-plus the cash register end (right) and the coffee end (left).  Painted labels: tex.py -> tex/sheet.png + tex/regions.json"""
+on the counter (whisky, the second drink, ashtray + a cigar you can pick up, the owner's note, matchbook, cigar box, paperback, peanuts...),
+plus the cash register end (right) and the coffee end (left). Second atlas `counter_b`: the ashtray and the cigar.  Painted labels: tex.py -> tex/sheet.png + tex/regions.json"""
 import os, json, math, random
-import bmesh
+import bpy, bmesh
 from mathutils import Vector, Matrix
 from barkit import kit, mats, layout
 from barkit.kit import T, Rx, Ry, Rz
@@ -44,6 +44,86 @@ def ring_pts(R, z, n=24, cx=0.0, cy=0.0):
 
 def torus(name, R, r, z, mat, n=24, segs=6, cx=0.0, cy=0.0):
     return kit.tube(name, ring_pts(R, z, n, cx, cy), r, mat, segs=segs, caps=False)
+
+def leaf_mat(name):
+    """the cigar's wrapper: the painted leaf (tex.py: cigar_leaf) with a fine grain pressed into it and a slight oily sheen"""
+    if name in mats._M: return mats._M[name]
+    m, nt, b, _ = mats.base(name)
+    uv = mats.N(nt, 'ShaderNodeUVMap'); uv.uv_map = 'uv_tex'
+    t = mats.N(nt, 'ShaderNodeTexImage'); t.image = bpy.data.images.load(SHEET, check_existing=True); t.name = 'SRC'
+    mats.L(nt, uv.outputs[0], t.inputs[0]); mats.L(nt, t.outputs[0], b.inputs['Base Color'])
+    v = mats.coords(nt)
+    n1 = mats.noise(nt, v, 900, 3, 0.6)
+    mats.L(nt, mats.math_(nt, 'ADD', 0.44, mats.math_(nt, 'MULTIPLY', n1, 0.16), clamp=True), b.inputs['Roughness'])
+    mats.setp(b, coat=0.12, coat_rough=0.3)
+    mats.bump(nt, b, mats.noise(nt, v, 1400, 3, 0.65), 0.22, 0.0006)
+    return m
+
+def ember_mat(name):
+    """the burn line of a cigar that has been resting a minute: coals showing through a crust of ash, not a solid ring of light"""
+    name = 'EMA_' + name
+    if name in mats._M: return mats._M[name]
+    m, nt, b, _ = mats.base(name)
+    n1 = mats.noise(nt, mats.coords(nt), 620, 3, 0.6)
+    glow = mats.ramp(nt, n1, [(0.40, (0.010, 0.003, 0.001)), (0.56, (0.80, 0.07, 0.008)), (0.80, (1.0, 0.20, 0.02))])
+    mats.L(nt, glow, b.inputs['Emission Color'])
+    mats.setp(b, col=(0.03, 0.025, 0.022), emit_s=1.6, rough=0.9)      # dull at rest: the page adds the glow when it is drawn on
+    return m
+
+CG = layout.CIGAR
+def cigar_r(d):
+    """radius of the perfecto d metres from the foot tip: a small nipple at the foot, a quick swell to the full ring gauge
+    about a quarter of the way along, a long slow taper, a rounded head. (Catmull-Rom through measured-by-eye points, in mm.)"""
+    pts = [(-2, 2.0), (0, 2.3), (3, 3.0), (7, 3.5), (10, 4.2), (14, 5.7), (20, 7.5), (27, 8.65), (35, 9.2), (45, 9.33), (70, 9.25), (100, 8.95),
+           (125, 8.55), (138, 8.05), (144, 7.3), (148, 6.0), (150.6, 4.2), (152.0, 2.0), (152.4, 0.0), (153, 0.0)]
+    x = d * 1000.0
+    x = min(max(x, 0.0), 152.4)
+    for i in range(1, len(pts) - 2):
+        if pts[i][0] <= x <= pts[i + 1][0]:
+            (x0, y0), (x1, y1), (x2, y2), (x3, y3) = pts[i - 1], pts[i], pts[i + 1], pts[i + 2]
+            t = (x - x1) / (x2 - x1)
+            m1 = (y2 - y0) / (x2 - x0) * (x2 - x1); m2 = (y3 - y1) / (x3 - x1) * (x2 - x1)
+            y = (2 * t ** 3 - 3 * t ** 2 + 1) * y1 + (t ** 3 - 2 * t ** 2 + t) * m1 + (-2 * t ** 3 + 3 * t ** 2) * y2 + (t ** 3 - t ** 2) * m2
+            return max(0.0, y) * CG['radius'] / 9.33          # mm on the 9.33 mm master profile -> metres
+    return 0.0
+
+def revolve(name, prof, mat, segs=24, rect=None, around='t', cap0=False, cap1=False, jitter=None, s_of=None):
+    """a surface of revolution about the cigar's centre line (layout.cigar_point). prof: [(d, r)], d = metres from the foot tip.
+    rect: region of the label sheet. around='t': the image's x runs along the cigar and its y round it (the wrapper);
+    around='s': the image's x runs round the cigar, its top edge toward the head (the band). The middle of the image's
+    'round' direction lies on top of the cigar as it rests. jitter(i, j) -> factor on the radius (for the ash)."""
+    o = Vector(layout.cigar_point(0.0)); a = (Vector(layout.cigar_point(CG['length'])) - o).normalized()
+    n0 = (Vector((0, 0, 1)) - a * a.z).normalized(); b = a.cross(n0)
+    bm = bmesh.new(); uvl = bm.loops.layers.uv.new('uv_tex')
+    d0, d1 = prof[0][0], prof[-1][0]
+    s_of = s_of or (lambda d: d / CG['length'])
+    rings = []
+    for i, (d, r) in enumerate(prof):
+        c = o + a * d
+        rings.append([bm.verts.new(c + (n0 * math.cos(2 * math.pi * j / segs) + b * math.sin(2 * math.pi * j / segs)) * r * (jitter(i, j) if jitter else 1.0))
+                      for j in range(segs)])
+    for i in range(len(prof) - 1):
+        A, B = rings[i], rings[i + 1]; da, db = prof[i][0], prof[i + 1][0]
+        for j in range(segs):
+            j2 = (j + 1) % segs
+            f = bm.faces.new((A[j], A[j2], B[j2], B[j]))
+            # the face that crosses the fold of the 'round' direction takes its far edge at t=1 (or 0), not at the wrapped value
+            ja, jb = j, j + 1
+            def uvq(d, jj, lo):
+                t = jj / segs + 0.5
+                if t > 1.0 + 1e-9: t -= 1.0
+                if not lo and abs(t) < 1e-9: t = 1.0
+                if rect is None: return (0.0, 0.0)
+                return uvmap(rect, s_of(d), t) if around == 't' else uvmap(rect, t, (d - d0) / (d1 - d0))
+            for loop, (dd, jj, lo) in zip(f.loops, ((da, ja, True), (da, jb, False), (db, jb, False), (db, ja, True))):
+                loop[uvl].uv = uvq(dd, jj, lo)
+    if cap0:
+        c = bm.verts.new(o + a * d0)
+        for j in range(segs): bm.faces.new((c, rings[0][(j + 1) % segs], rings[0][j]))
+    if cap1:
+        c = bm.verts.new(o + a * d1)
+        for j in range(segs): bm.faces.new((c, rings[-1][j], rings[-1][(j + 1) % segs]))
+    return kit.finish(name, bm, mat, smooth=True, sharp=50)
 
 def uvmap(rect, s, t):
     u0, v0, u1, v1 = rect
@@ -207,10 +287,9 @@ def MATS():
     M['cork'] = mats.noisy('counter_cork', (0.30, 0.18, 0.09), (0.50, 0.33, 0.18), rough=0.85, scale=500)
     M['cedar'] = mats.wood('counter_cedar', axis='X', cols=((0.17, 0.06, 0.025), (0.30, 0.12, 0.05), (0.42, 0.19, 0.09)), rough=0.6, scale=2.5)
     M['gold_paper'] = mats.plain('counter_gold_paper', (0.55, 0.38, 0.12), rough=0.35, metal_=0.6)
-    M['leaf'] = mats.noisy('counter_leaf', (0.085, 0.038, 0.016), (0.19, 0.095, 0.042), rough=0.6, scale=90, bmp=0.12)
+    M['leaf'] = leaf_mat('counter_leaf')
     M['ash'] = mats.noisy('counter_ash', (0.24, 0.21, 0.18), (0.56, 0.51, 0.45), rough=0.95, scale=160, bmp=0.3)
-    M['ember'] = mats.emissive('counter_ember', (1.0, 0.30, 0.05), 9, night_only=False)
-    M['band'] = mats.plain('counter_cigar_band', (0.36, 0.04, 0.03), rough=0.35)
+    M['ember'] = ember_mat('counter_ember')
     M['porcelain'] = mats.plain('counter_porcelain', (0.86, 0.83, 0.76), rough=0.1, coat=0.4)
     M['cobalt'] = mats.plain('counter_cobalt', (0.04, 0.09, 0.32), rough=0.12)
     M['cup'] = mats.plain('counter_cup', (0.80, 0.74, 0.60), rough=0.12, coat=0.4)
@@ -453,7 +532,9 @@ def build_second(M, R):
 
 def build_ashtray(M):
     x, y = SL['ashtray']
-    with kit.props(td=2.4), kit.xform(T(x, y, Z)):
+    # the ashtray and the cigar have a small atlas of their own (counter_b): the cigar is held right up to the eye, and a change
+    # to it can then be baked in a few minutes without baking the whole counter again
+    with kit.props(atlas='counter_b', td=2.4), kit.xform(T(x, y, Z)):
         prof = [(0.058, 0.0), (0.0625, 0.004), (0.0635, 0.020), (0.0615, 0.0255), (0.0565, 0.0262), (0.0505, 0.0258), (0.047, 0.022),
                 (0.044, 0.011), (0.036, 0.0068), (0.0, 0.0062)]
         notches = [math.radians(a) for a in (-55, 65, 185)]
@@ -467,27 +548,39 @@ def build_ashtray(M):
                     f = min(1, max(0, (v.co.z - 0.010) / 0.014))
                     v.co.z -= 0.0095 * w * f
         lathe('ashtray', prof, M['brass'], segs=64, edit=notch, sharp=50)
-        # cigar resting in the notch at -55 deg, lit end over the middle
-        u = Vector((math.cos(notches[0]), math.sin(notches[0]), 0))
-        def P(s, zz): return Vector((0, 0, 0)) + u * s + Vector((0, 0, zz))
-        rc = 0.0088
-        s_tip, s_ember, s_end, L = -0.024, -0.002, 0.118, 0.142
-        zn = 0.0262 - 0.0095 + rc; zt = zn - 0.0035          # body rests in the notch (s=0.06), nearly level so the ember shows
-        slope = (zn - zt) / (0.06 - s_tip)
-        zz = lambda s: zt + (s - s_tip) * slope
-        ash = [P(s_tip + 0.0005, zz(s_tip)), P(s_tip + 0.004, zz(s_tip + 0.004)), P(s_tip + 0.010, zz(s_tip + 0.010)), P(s_ember - 0.006, zz(s_ember - 0.006)), P(s_ember, zz(s_ember))]
-        kit.tube('cigar_ash', ash, rc, M['ash'], segs=12, radii=[rc * 0.70, rc * 0.93, rc * 1.03, rc * 0.97, rc * 0.92])
-        kit.tube('cigar_ember', [P(s_ember - 0.0006, zz(s_ember - 0.0006)), P(s_ember + 0.0028, zz(s_ember + 0.0028))], rc, M['ember'], segs=12, radii=[rc * 0.93, rc * 0.99])
-        body = [P(s, zz(s)) for s in (s_ember + 0.0025, 0.03, 0.06, 0.09, 0.105)]
-        kit.tube('cigar_body', body, rc, M['leaf'], segs=14)
-        kit.tube('cigar_band', [P(0.105, zz(0.105)), P(0.117, zz(0.117))], rc * 1.04, M['band'], segs=14)
-        kit.tube('cigar_head', [P(0.117, zz(0.117)), P(0.128, zz(0.128)), P(0.133, zz(0.133)), P(0.136, zz(0.136))], rc, M['leaf'], segs=14,
-                 radii=[rc, rc * 0.97, rc * 0.8, rc * 0.45])
         # a little loose ash in the dish
         with kit.xform(T(-0.012, 0.014, 0.0072) @ S(1.6, 1.1, 0.35)):
             lathe('loose_ash', [(0, -0.001), (0.006, 0.0), (0.009, 0.006), (0.005, 0.011), (0, 0.012)], M['ash'], segs=8)
         with kit.xform(T(0.010, 0.020, 0.0068) @ S(1.0, 0.7, 0.3)):
             lathe('loose_ash2', [(0, -0.001), (0.004, 0.0), (0.006, 0.004), (0.003, 0.008), (0, 0.009)], M['ash'], segs=7)
+
+def build_cigar(M, R):
+    """A 6 x 47 perfecto in the manner of a Hemingway Signature: nipple foot, full belly, rounded head, a reddish Cameroon-style
+    wrapper. It has not been lit long: the ash still has the shape of the foot. It rests in the ashtray's -55 deg notch.
+    Two interactive pieces, because the page picks it up and smokes it: 'cigar' (body, band, ember) and 'cigar_ash'."""
+    burn = CG['burn']; Lc = CG['length']; b0, b1 = CG['band']
+    def samples(d0, d1):
+        ds = [d0]
+        while ds[-1] < d1 - 1e-6:
+            d = ds[-1]
+            step = 0.0025 if d < 0.046 else 0.012 if d < 0.132 else 0.0022 if d < 0.147 else 0.0009
+            ds.append(min(d1, d + step))
+        return ds
+    with kit.props(atlas='counter_b'), kit.interactive('cigar', origin=IA['cigar'][1], td=9):
+        # the ember: a ring of fire between the ash and the leaf (capped toward the foot, so nothing is open when the ash is knocked off)
+        kit_e = [(burn - 0.0008, cigar_r(burn) * 0.90), (burn + 0.0010, cigar_r(burn + 0.001) * 0.985), (burn + 0.0026, cigar_r(burn + 0.0026) * 0.99)]
+        revolve('cigar_ember', kit_e, M['ember'], segs=24, cap0=True)
+        body = [(d, cigar_r(d)) for d in samples(burn + 0.0022, Lc)]
+        revolve('cigar_body', body, M['leaf'], segs=24, rect=R['cigar_leaf'], around='t')
+        band = [(d, cigar_r(d) + 0.00022) for d in (b0, (b0 + b1) / 2, b1)]
+        revolve('cigar_band', band, M['labels_gloss'], segs=24, rect=R['cigar_ring'], around='s')
+    with kit.props(atlas='counter_b'), kit.interactive('cigar_ash', origin=IA['cigar_ash'][1], td=9):
+        rnd = random.Random(1947)
+        ash = [(d, cigar_r(d) * 1.03) for d in (0.0, 0.0012, 0.003, 0.005, 0.0075, 0.010, 0.0125, 0.0148, burn - 0.0004)]
+        ringk = [1.0 + rnd.uniform(-0.05, 0.06) for _ in ash]            # ash builds in rings
+        jit = {(i, j): ringk[i] * (1.0 + rnd.uniform(-0.035, 0.035)) for i in range(len(ash)) for j in range(16)}
+        jit.update({(len(ash) - 1, j): 1.0 for j in range(16)})          # the last ring meets the ember cleanly
+        revolve('cigar_ash', ash, M['ash'], segs=16, cap0=True, jitter=lambda i, j: jit[(i, j)])
 
 def build_note(M, R):
     pid, o, sz = IA['note']
@@ -631,7 +724,7 @@ def build_opener(M):
         kit.box('opener_slot', L / 2 - w * 1.25, L / 2 - w * 0.28, -0.0045, 0.0045, 0.0022, 0.00225, M['black'], only=['+z'])
 
 def build_still_life(M, R):
-    build_whisky(M, R); build_second(M, R); build_ashtray(M); build_note(M, R); build_matchbook(M, R)
+    build_whisky(M, R); build_second(M, R); build_ashtray(M); build_cigar(M, R); build_note(M, R); build_matchbook(M, R)
     build_cigarbox(M, R); build_paperback(M, R); build_peanuts(M); build_opener(M)
 
 # =========================================================================================== counter ends

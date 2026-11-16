@@ -33,10 +33,11 @@ R = dict(
     cigar_band=(768, 576, 768, 128),
     flags=(768, 704, 512, 128),
     plate=(1280, 704, 512, 96),
-    cigar_ring=(1280, 800, 256, 64),
+    cigar_ring=(1280, 800, 512, 160),      # the paper band on the cigar: x runs around it, the top edge is toward the head
     book=(0, 1088, 1024, 780),
     score=(1024, 1088, 1024, 640),
     keys=(768, 832, 512, 256),
+    cigar_leaf=(1024, 1728, 1024, 320),    # the cigar's wrapper leaf: x runs foot -> head, y runs around it (tiles in y)
 )
 
 def F(path, size):
@@ -306,13 +307,90 @@ def p_cigar_band(w, h):
     return wear_edges(im, 0.4, 72, (220, 205, 165), 5)
 
 def p_cigar_ring(w, h):
-    im = Image.new('RGBA', (w, h), (130, 24, 20, 255)); d = ImageDraw.Draw(im)
-    gold = (196, 150, 64)
-    d.rectangle((0, 0, w, 7), fill=(*gold, 255)); d.rectangle((0, h - 7, w, h), fill=(*gold, 255))
-    d.ellipse((w / 2 - 22, h / 2 - 22, w / 2 + 22, h / 2 + 22), fill=(*gold, 255))
-    d.ellipse((w / 2 - 14, h / 2 - 14, w / 2 + 14, h / 2 + 14), fill=(240, 230, 200, 255))
-    for x in (40, w - 40): text_c(d, x, h * 0.28, "TR", F(F_SERIF_B, 22), (*gold, 255))
+    """the house band (Tres Relojes, the same invented marque as the box): oxblood, gold lines, a cream medallion with one clock.
+    x runs once around the cigar (the medallion sits in the middle = on top of the cigar as it lies), the top edge is toward the head."""
+    ox = (112, 22, 20); gold = (198, 152, 66); gold_d = (140, 100, 38); cream = (240, 228, 196); dk = (48, 24, 14)
+    a = np.ones((h, w, 3), np.float32) * np.array(ox, np.float32)
+    a *= 0.94 + 0.12 * fbm(h, w, (40, 12, 3), 81)[..., None]
+    im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGB').convert('RGBA'); d = ImageDraw.Draw(im)
+    for (y0, y1, c) in ((0, 9, gold), (12, 14, gold), (h - 14, h - 12, gold), (h - 9, h, gold)):
+        d.rectangle((0, y0, w, y1), fill=(*c, 255))
+    for x in range(6, w, 12):                                   # a row of pin dots inside each gold line
+        d.ellipse((x - 1.6, 19, x + 1.6, 22.2), fill=(*gold, 255)); d.ellipse((x - 1.6, h - 22.2, x + 1.6, h - 19), fill=(*gold, 255))
+    cx, cy = w / 2, h / 2
+    # medallion: slightly taller than the band's field, as on a real band
+    rx, ry = 62, 66
+    d.ellipse((cx - rx - 7, cy - ry - 7, cx + rx + 7, cy + ry + 7), fill=(*gold, 255))
+    d.ellipse((cx - rx - 3, cy - ry - 3, cx + rx + 3, cy + ry + 3), fill=(*gold_d, 255))
+    d.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=(*cream, 255))
+    r = 40; yy = cy - 4
+    d.ellipse((cx - r, yy - r, cx + r, yy + r), outline=(*dk, 255), width=3)
+    for t in range(12):
+        an = math.radians(t * 30); r0 = r - (9 if t % 3 == 0 else 6)
+        d.line((cx + r0 * math.cos(an), yy + r0 * math.sin(an), cx + (r - 3) * math.cos(an), yy + (r - 3) * math.sin(an)), fill=(*dk, 255), width=3 if t % 3 == 0 else 2)
+    for (hh, ln, wd) in ((1.9, 20, 4), (0.0, 29, 3)):             # five to two, more or less: after closing
+        an = math.radians(hh * 30 - 90) if ln < 25 else math.radians(11 * 30 - 90)
+        d.line((cx, yy, cx + ln * math.cos(an), yy + ln * math.sin(an)), fill=(*dk, 255), width=wd)
+    d.ellipse((cx - 3.5, yy - 3.5, cx + 3.5, yy + 3.5), fill=(*ox, 255))
+    text_c(d, cx, cy + 40, "No. 4", F(F_CAL_B, 17), (*ox, 255), spacing=1)
+    # the name either side of the medallion, small print further round
+    f = F(F_SERIF_B, 30)
+    text_c(d, cx - 128, cy - 19, "TRES", f, (*gold, 255), spacing=3)
+    text_c(d, cx + 136, cy - 19, "RELOJES", F(F_SERIF_B, 25), (*gold, 255), spacing=2)
+    fs = F(F_CAL_I, 17)
+    text_c(d, cx - 128, cy + 22, "selectos", fs, (*cream, 235)); text_c(d, cx + 136, cy + 22, "hecho a mano", fs, (*cream, 235))
+    for x in (30, w - 30):
+        d.polygon([(x, cy - 9), (x + 7, cy), (x, cy + 9), (x - 7, cy)], fill=(*gold, 255))
     return im
+
+def _tile_y(n):
+    """make a noise field wrap in y (the wrapper goes right round the cigar): cross-fade it with itself half a turn on"""
+    h = n.shape[0]; y = np.arange(h, dtype=np.float32)[:, None]
+    k = 1 - np.abs(2 * y / h - 1)
+    return n * k + np.roll(n, h // 2, 0) * (1 - k)
+
+def p_cigar_leaf(w, h):
+    """a Cameroon-style wrapper leaf: reddish mid-brown, a little oily, toothy, wound on in a spiral with the cap at the head.
+    x = along the cigar (0 foot tip .. 1 head), y = around it."""
+    L_MM = 152.4; mm = w / L_MM                                   # px per millimetre along the cigar
+    X = np.arange(w, dtype=np.float32)[None, :] + np.zeros((h, 1), np.float32); Y = np.arange(h, dtype=np.float32)[:, None] + np.zeros((1, w), np.float32)
+    lo = np.array((96, 56, 31), np.float32); hi = np.array((143, 90, 51), np.float32)
+    m = _tile_y(fbm(h, w, (120, 40, 12, 4), 91, [0.4, 0.3, 0.2, 0.1]))
+    m = np.clip((m - 0.5) * 1.8 + 0.5, 0, 1)
+    a = lo + (hi - lo) * m[..., None]
+    # the leaf is wound on as one spiral strip: a seam every 30 mm of length, and a slow change of tone across the strip
+    pitch = 30 * mm
+    cap0 = 141.5 * mm                                             # the cap (a separate round of leaf) starts here
+    ph = (Y / h - X / pitch) % 1.0
+    body = (X < cap0 - 2).astype(np.float32)
+    a *= (1 - 0.07 * (ph - 0.5) * body)[..., None]
+    dpx = np.minimum(ph, 1 - ph) * h * 0.5                        # rough distance to the seam in px
+    seam = np.exp(-(dpx / 1.3) ** 2) * body
+    lip = np.exp(-np.clip(ph * h * 0.5, 0, 60) / 5.0) * body      # the overlapping edge catches a little light
+    a *= (1 - 0.42 * seam)[..., None]; a *= (1 + 0.10 * lip * (1 - seam))[..., None]
+    # veins: finer, steeper spirals, broken up
+    r = np.random.default_rng(92)
+    for j in range(7):
+        pj = (55 + 60 * r.random()) * mm; off = r.random(); wv = 0.7 + 0.8 * r.random()
+        pv = (Y / h - X / pj + off) % 1.0; dv = np.minimum(pv, 1 - pv) * h * 0.6
+        brk = np.clip((_tile_y(noise2(h, w, 46, 200 + j)) - 0.38) * 3, 0, 1)
+        v = np.exp(-(dv / wv) ** 2) * brk * body
+        a *= (1 + 0.13 * v)[..., None]
+        a *= (1 - 0.10 * np.exp(-((dv - 2.2 * wv) / wv) ** 2) * brk * body)[..., None]     # its shadow side
+    # tooth: the tiny pale grains a Cameroon leaf is known for
+    t = (r.random((h, w)) > 0.985).astype(np.float32)
+    t = np.asarray(Image.fromarray((t * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.7))).astype(np.float32) / 255
+    a *= (1 + 0.9 * _tile_y(t))[..., None]
+    a *= (0.95 + 0.10 * _tile_y(noise2(h, w, 2.5, 93)))[..., None]
+    # the cap: two fine lines round the head
+    for xc, k in ((cap0, 0.40), (cap0 + 4.2 * mm, 0.30)):
+        a *= (1 - k * np.exp(-((X - xc) / 1.4) ** 2))[..., None]
+    # scorched for a few millimetres behind the burn line (17 mm from the foot); before that it is ash anyway
+    burn = 17.0 * mm
+    edge = burn + 0.6 * mm + (_tile_y(noise2(h, w, 9, 94)) - 0.5) * 1.8 * mm
+    k = np.clip((X - edge) / (4.0 * mm), 0, 1); k = k * k * (3 - 2 * k)
+    a = a * (0.16 + 0.84 * k)[..., None] + np.array((14, 10, 8), np.float32) * (1 - k)[..., None] * 0.6
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGB')
 
 def p_flags(w, h):
     im = Image.new('RGBA', (w, h), (14, 12, 10, 255)); d = ImageDraw.Draw(im)
@@ -459,7 +537,7 @@ def p_score(w, h):
     return wear_edges(im, 0.25, 105, (240, 236, 220), 6)
 
 PAINT = dict(coaster=p_coaster, note=p_note, matchbook=p_matchbook, menu=p_menu, cigar_lid=p_cigar_lid, cigar_band=p_cigar_band,
-             flags=p_flags, plate=p_plate, cigar_ring=p_cigar_ring, book=p_book, score=p_score, keys=p_keys)
+             flags=p_flags, plate=p_plate, cigar_ring=p_cigar_ring, book=p_book, score=p_score, keys=p_keys, cigar_leaf=p_cigar_leaf)
 
 def main():
     os.makedirs(OUT, exist_ok=True)

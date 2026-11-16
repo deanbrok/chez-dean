@@ -212,13 +212,15 @@ def _bake(obs, name, res, kind, samples, margin, outdir):
 # full-resolution light at 64 samples (adaptive), then OpenImageDenoise with albedo + normal guides (see denoise()).
 # Raise SPP / RES on a machine with more cores (or a GPU) for an even cleaner result.
 RES = int(os.environ.get('BAR_RES', '2048')); SPP = int(os.environ.get('BAR_SPP', '64'))
+ATLAS_RES = {'counter_b': 0.5}       # atlases that hold only a few small things: a fraction of RES is plenty
 
 def bake(atlas, modes=('night',), test=False, outdir=None, albedo=True):
     """COMBINED (seen from the hero camera) + DIFFUSE colour + normals, all at full res -> <outdir>/*.npy"""
     outdir = outdir or os.path.join(OUT, 'bake'); os.makedirs(outdir, exist_ok=True)
     cycles_setup(); sc.camera = bpy.data.objects['cam_bar']
     bk = sc.render.bake; bk.view_from = 'ACTIVE_CAMERA'; bk.margin_type = 'EXTEND'; bk.target = 'IMAGE_TEXTURES'; bk.use_clear = True
-    lo, hi, spp = (512, 512, 8) if test else (RES, RES, SPP)
+    res = max(256, int(RES * ATLAS_RES.get(atlas, 1)))
+    lo, hi, spp = (512, 512, 8) if test else (res, res, SPP)
     obs = group(atlas)
     assert obs, 'no objects in atlas ' + atlas
     if len(obs) > 1:           # one joined object => one bake (this scene is not saved afterwards)

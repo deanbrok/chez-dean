@@ -237,6 +237,9 @@ export const CAT_LINES = [
 ];
 export const PHONE_WHISPER = 'Somewhere, a telephone.';
 export const REEL_LINE = 'The tape is threaded. Not yet.';
+// the cigar in the ashtray: said once, the first time you help yourself, and each time the ash comes off
+export const CIGAR_FIRST = 'Not yours, strictly speaking.';
+export const CIGAR_ASH = 'The ash holds as long as it can.';
 
 export const HELP = {
   title: 'Pull up a stool',
@@ -245,6 +248,7 @@ export const HELP = {
     'Click a part of the room to go there, or use the dial at the bottom, the arrow keys, 1–6, or a swipe.',
     'Small brass rings mark what opens. Records are posts, books are reading lists, bottles are projects.',
     '♪ or the record on the turntable for sound.',
+    'The cigar in the ashtray is still lit. Nobody is counting.',
     'Esc closes a page, then takes you back to your stool.',
   ],
   small: 'All text in this room is sample content.',
