@@ -177,6 +177,25 @@ export function pianoChord() {
   });
 }
 
+// the cigar: a draw (air through the leaf, the foot crackling) and the long breath out
+export function breath(kind) {
+  if (!soundOn()) return;
+  const c = A.ctx, t = c.currentTime + 0.02, inn = kind === 'in', dur = inn ? 1.5 : 2.6, peak = inn ? 0.030 : 0.045;
+  const s = noiseSrc(), f = c.createBiquadFilter(), g = c.createGain();
+  f.type = 'bandpass'; f.Q.value = 0.8;
+  f.frequency.setValueAtTime(inn ? 2400 : 950, t); f.frequency.linearRampToValueAtTime(inn ? 3300 : 520, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + dur * 0.25);
+  g.gain.linearRampToValueAtTime(peak * 0.7, t + dur * 0.7); g.gain.linearRampToValueAtTime(0, t + dur);
+  s.connect(f); f.connect(g); g.connect(A.fx); s.start(t, Math.random() * 2); s.stop(t + dur + 0.05);
+  if (!inn) return;
+  const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500; hp.connect(A.fx);
+  for (let i = 0; i < 9; i++) {                         // the leaf catching
+    const at = t + 0.25 + Math.random() * 1.1, k = noiseSrc(false), kg = c.createGain();
+    kg.gain.setValueAtTime(0.02 + Math.random() * 0.035, at); kg.gain.exponentialRampToValueAtTime(0.0001, at + 0.012);
+    k.connect(kg); kg.connect(hp); k.start(at, Math.random() * 3, 0.02);
+  }
+}
+
 // two short bursts of an old telephone bell
 export function phoneBell() {
   if (!soundOn()) return;

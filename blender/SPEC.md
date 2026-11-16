@@ -44,6 +44,7 @@ are the only coordination, so follow them exactly.
 |---|---|
 | Stairs behind the door go DOWN, deeper than a basement should, old stone, cold glow from below | shell |
 | A second, half-finished drink at the next seat, ice not yet melted; a note left by the owner | counter |
+| A cigar left burning in the ashtray, not long lit (the visitor can pick it up and smoke it) | counter + web |
 | One LP spine on the shelf is pure white, no text; a small sheep figurine among the books | shelves |
 | The reel-to-reel is threaded and ready although the record is what is playing | hifi |
 | Manuscript page mid-sentence, pen uncapped; a pot of spaghetti on the hob | nook |
@@ -128,7 +129,7 @@ Rules for `build()` (the assembler imports your file and calls it inside a scene
   `night_only=False` (`EMA_`); there is only one (night) bake now, so both are lit. Lamp shades that should glow: `mats.shade_paper` around an emissive bulb.
 - Glass: `mats.glass`. Liquids: tinted glass. Keep it simple; it all gets baked.
 - Everything is baked into ONE 2048² texture atlas per part (hifi may use a second atlas
-  `hifi_b`, shelves a second `shelves_b`, by wrapping some objects in `kit.props(atlas='shelves_b')`).
+  `hifi_b`, shelves a second `shelves_b`, counter a small `counter_b` for the ashtray and the cigar, by wrapping some objects in `kit.props(atlas='shelves_b')`).
   Texel density is steered with `kit.props(td=...)`: 1.0 normal; 1.5–2.5 for hero objects seen close
   (things on the counter, interactive pieces, labels with text); 0.3–0.6 for big plain or distant
   surfaces. Delete faces that can never be seen (backs against walls, undersides, insides) with

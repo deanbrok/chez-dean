@@ -39,7 +39,7 @@ function parseHash(h) {
 const HASH = parseHash(location.hash);
 
 // ---------------------------------------------------------------- the interactive names (the contract with the modellers)
-const NAMES = ['door', 'note', 'cigarbox', 'matchbook', 'paperback', 'platter_record', 'tonearm', 'reel_l', 'reel_r', 'nowplaying',
+const NAMES = ['door', 'note', 'cigarbox', 'matchbook', 'paperback', 'cigar', 'platter_record', 'tonearm', 'reel_l', 'reel_r', 'nowplaying',
   'manuscript', 'radio', 'phone', 'piano_keys', 'clock_hour', 'clock_min', 'clock_sec', 'mapframe',
   'rec_0', 'rec_1', 'rec_2', 'rec_3', 'rec_4', 'rec_5', 'book_0', 'book_1', 'book_2', 'book_3',
   'bottle_0', 'bottle_1', 'bottle_2', 'bottle_3', 'cat_sleep', 'cat_sit', 'cat_watch'];
@@ -58,6 +58,7 @@ function specFor(name) {
     matchbook: { pref: 'bar', act: 'panel', motion: 'slide' },
     cigarbox: { pref: 'bar', act: 'panel', motion: 'lid' },
     paperback: { pref: 'bar', act: 'panel', motion: 'lift' },
+    cigar: { pref: 'bar', act: 'smoke', motion: 'cigar' },
     phone: { pref: 'window', act: 'panel', motion: null },
     mapframe: { pref: 'window', act: 'panel', motion: null },
     piano_keys: { pref: 'window', act: 'chord', motion: 'dip' },
@@ -85,6 +86,7 @@ function labelFor(it) {
     case 'matchbook': return ['A matchbook', 'How this place was made'];
     case 'cigarbox': return ['The cigar box', 'Odds & ends'];
     case 'paperback': return ['Face down, left open', 'Currently reading'];
+    case 'cigar': return ['In the ashtray, still lit', 'Take a puff'];
     case 'phone': return ['The telephone', 'Contact'];
     case 'mapframe': return ['An old map', 'Places'];
     case 'piano_keys': return ['The piano', AU.soundOn() ? 'One chord' : 'One chord (sound is off)'];
@@ -196,6 +198,10 @@ const atlasOf = (o) => {
 };
 const staticMeshes = [];
 const nameSet = new Set(NAMES);
+{ // the cigar's ash is its own mesh (it grows, and gets knocked off) but it goes wherever the cigar goes
+  const cg = root.getObjectByName('cigar'), ash = root.getObjectByName('cigar_ash');
+  if (cg && ash) cg.attach(ash);
+}
 const isInteractive = (o) => { for (let p = o; p && p !== root; p = p.parent) if (nameSet.has(p.name)) return p.name; return null; };
 root.traverse((o) => {
   if (!o.isMesh) return;
@@ -506,6 +512,7 @@ function perform(it) {
     case 'chord': AU.pianoChord(); it.pulse = 1; break;
     case 'radio': AU.setRadio(!AU.state().radio); it.pulse = 1; break;
     case 'say': whisper(C.REEL_LINE, 3200); break;
+    case 'smoke': startPuff(); break;
     case 'cat': whisper(C.CAT_LINES[catLine++ % C.CAT_LINES.length], 3600); break;
   }
 }
@@ -549,7 +556,7 @@ function pick(cx, cy) {
   const o = ray.ray.origin.clone(), d = ray.ray.direction.clone();
   const cands = [];
   for (const it of ITEMS) {
-    if (it.hidden || !it.label) continue;
+    if (it.hidden || it.busy || !it.label) continue;
     if (ray.ray.intersectBox(it.hit, hitP)) cands.push({ item: it, dist: hitP.distanceTo(o) });
   }
   for (const rg of REGIONS) if (rg.stop !== stop && ray.ray.intersectBox(rg.box, hitP)) cands.push({ region: rg, dist: hitP.distanceTo(o) + 0.3 });
@@ -623,12 +630,12 @@ function refreshMarks() {        // which rings are not hidden behind something,
 }
 const pv = new THREE.Vector3();
 function updateMarks(time) {
-  const show = !open && !tween && arrivedAt !== null && clockT - arrivedAt > 0.6;
+  const show = !open && !tween && !SM.on && arrivedAt !== null && clockT - arrivedAt > 0.6;
   const placed = [];
   for (const it of ITEMS) {
     const m = it.mark; if (!m) continue;
     const ringing = it.name === 'phone' && ring.on;
-    let on = (show && m.vis) || (ringing && !open);
+    let on = (show && m.vis && !it.busy) || (ringing && !open);
     if (on) {
       pv.copy(m.p).project(camera);
       const x = ((pv.x + 1) / 2) * innerWidth, y = ((1 - pv.y) / 2) * innerHeight;
@@ -685,6 +692,135 @@ const burst = (t) => (t < 0.9 || (t > 1.35 && t < 2.25) ? 1 : 0);
 // ---------------------------------------------------------------- the second moon
 const moon = { dwell: 0, need: +(HASH.kv.moon || 12), on: !!(SS && SS.getItem('moon2')), a: SS && SS.getItem('moon2') ? 1 : 0 };
 
+// ---------------------------------------------------------------- the cigar: pick it up, draw, let the smoke out, put it back
+// The model gives three points on its centre line (scene.json: cigar_foot, cigar_ember, cigar_head). Everything else is posed
+// from those: where it rests, where the hand holds it up to be looked at, and where it sits when it is in your mouth.
+const CG_T = { lift: 1.15, look: 0.85, mouth: 0.75, draw: 1.7, back: 1.3, tap: 0.55 };
+CG_T.t1 = CG_T.lift; CG_T.t2 = CG_T.t1 + CG_T.look; CG_T.t3 = CG_T.t2 + CG_T.mouth; CG_T.t4 = CG_T.t3 + CG_T.draw; CG_T.t5 = CG_T.t4 + CG_T.back;
+const SM = { on: false, t: 0, hold: false, in: false, out: false, tap: false, tapped: false, puffs: 0, said: false, warm: 0, ash: 1, ashTo: 1, drawK: 0 };
+const CIGAR = (() => {
+  const it = BY.cigar; if (!it || !P.cigar_foot || !P.cigar_head || !P.cigar_ember) return null;
+  const foot = V(P.cigar_foot), head = V(P.cigar_head), ember = V(P.cigar_ember);
+  const a0 = head.clone().sub(foot).normalize();
+  const n0 = UP.clone().addScaledVector(a0, -a0.y).normalize(), s0 = new THREE.Vector3().crossVectors(a0, n0);
+  const rest = new THREE.Matrix4().makeBasis(a0, n0, s0).transpose();        // the resting frame, inverted (it is orthonormal)
+  it.obj.updateMatrixWorld(true);
+  // the ash hangs from a pivot on the burn line whose X axis is the cigar's own, so it can be made longer or shorter
+  const ash = it.obj.getObjectByName('cigar_ash'); let pivot = null;
+  if (ash) {
+    pivot = new THREE.Group(); it.obj.add(pivot);
+    pivot.position.copy(it.obj.worldToLocal(ember.clone()));
+    pivot.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), a0.clone().applyQuaternion(it.obj.quaternion.clone().invert()));
+    pivot.updateMatrixWorld(true); pivot.attach(ash);
+  }
+  const glow = FX.sprite(new THREE.Color(1, 0.36, 0.07), 0.04, 0); glow.renderOrder = 9; scene.add(glow);
+  const lamp = (META.glows || []).find((g) => /counter_lamp/.test(g.name));
+  const puff = FX.makePuff(SMALL_SCREEN ? 20 : 34);
+  if (lamp) puff.material.uniforms.uLamp.value.copy(V(lamp.p));
+  scene.add(puff);
+  return { it, foot, head, ember, a0, n0, rest, len: head.distanceTo(foot), pivot, glow, puff,
+    footL: foot.clone().sub(it.home.p), emberL: ember.clone().sub(it.home.p), midL: foot.clone().lerp(head, 0.6).sub(it.home.p),
+    emberW: ember.clone(), focus: new THREE.Vector3(), held: 0, wisp: 0.2, qd: new THREE.Quaternion() };
+})();
+function startPuff() {
+  if (!CIGAR || SM.on) return;
+  SM.on = true; SM.t = 0; SM.hold = false; SM.in = false; SM.out = false; SM.tapped = false; SM.puffs++;
+  SM.tap = SM.ashTo >= 1.3;                    // by about the third draw the ash is long enough to knock off
+  CIGAR.it.busy = true; hideTip();
+  if (!SM.said) { SM.said = true; whisper(C.CIGAR_FIRST, 3800); }
+}
+function breatheOut(time) {
+  SM.out = true;
+  const c = CIGAR, p = c.puff;
+  if (REDUCED) { p.userData.emit(tmpV.copy(c.emberW).setY(c.emberW.y + 0.03), tmpV2.set(0, 1, 0), time, { speed: 0.35, spread: 0.3 }); }
+  else {
+    const o = tmpV.copy(view.p).addScaledVector(view.f, 0.09).addScaledVector(view.u, -0.075);
+    p.userData.emit(o, tmpV2.copy(view.f).addScaledVector(view.u, -0.10).normalize(), time);
+  }
+  p.visible = true; AU.breath('out');
+}
+// a point `d` metres in front of the eye, at (nx, ny) of the half-screen
+const cgAt = (out, d, nx, ny, tanV, aspect) => out.copy(view.p).addScaledVector(view.f, d).addScaledVector(view.r, nx * d * tanV * Math.min(aspect, 1.9)).addScaledVector(view.u, ny * d * tanV);
+const cgA = new THREE.Vector3(), cgN = new THREE.Vector3(), cgS = new THREE.Vector3(), cgM = new THREE.Matrix4();
+const cgF1 = new THREE.Vector3(), cgF2 = new THREE.Vector3(), cgQ1 = new THREE.Quaternion(), cgQ2 = new THREE.Quaternion(), QI = new THREE.Quaternion();
+function cgQuat(out, ax, top) {                // the turn that takes the resting cigar to: axis (foot -> head) = ax, band's face toward `top`
+  cgA.copy(ax).normalize(); cgN.copy(top).addScaledVector(cgA, -top.dot(cgA)).normalize(); cgS.crossVectors(cgA, cgN);
+  return out.setFromRotationMatrix(cgM.makeBasis(cgA, cgN, cgS).multiply(CIGAR.rest));
+}
+function poseCigar(it, dt, time) {
+  const c = CIGAR, o = it.obj, T = CG_T;
+  if (SM.on && !SM.hold) SM.t += dt;
+  const t = SM.on ? SM.t : 0;
+  let F = c.foot, q = QI, held = 0; SM.drawK = 0;
+  if (SM.on && !REDUCED) {
+    const tanV = Math.tan(THREE.MathUtils.degToRad(view.fov) / 2), aspect = innerWidth / innerHeight;
+    // held up to be looked at: across the view, foot to the left and a little away, the band turned to the eye
+    cgQuat(cgQ1, tmpV.copy(view.r).multiplyScalar(0.86).addScaledVector(view.u, -0.16).addScaledVector(view.f, -0.44), tmpV2.copy(view.f).negate().addScaledVector(view.u, 0.3));
+    cgAt(cgF1, 0.31, 0.06, -0.15, tanV, aspect).addScaledVector(cgA, -c.len * 0.5);
+    cgF1.y += Math.sin(time * 1.3) * 0.0012;
+    // in the corner of the mouth: it comes up out of the bottom of the frame, a little from the right, lit end in view
+    cgQuat(cgQ2, tmpV.copy(view.f).multiplyScalar(-0.80).addScaledVector(view.u, -0.42).addScaledVector(view.r, 0.40), view.u);
+    cgAt(cgF2, 0.20, -0.10, -0.50, tanV, aspect);
+    if (t < T.t1) { const e = smooth(t / T.t1); F = tmpV3.lerpVectors(c.foot, cgF1, e); F.y += Math.sin(Math.PI * e) * 0.03; q = tmpQ2.slerpQuaternions(QI, cgQ1, e); held = e; }
+    else if (t < T.t2) { F = cgF1; q = cgQ1; held = 1; }
+    else if (t < T.t3) { const e = smooth((t - T.t2) / T.mouth); F = tmpV3.lerpVectors(cgF1, cgF2, e); q = tmpQ2.slerpQuaternions(cgQ1, cgQ2, e); held = 1; }
+    else if (t < T.t4) {
+      const x = (t - T.t3) / T.draw; SM.drawK = Math.max(0, Math.sin(Math.PI * Math.min(1, x * 1.15))) ** 0.6;
+      F = tmpV3.copy(cgF2).addScaledVector(view.f, -0.004 * SM.drawK); q = cgQ2; held = 1;
+    } else if (t < T.t5) { const e = smooth((t - T.t4) / T.back); F = tmpV3.lerpVectors(cgF2, c.foot, e); F.y += Math.sin(Math.PI * e) * 0.035; q = tmpQ2.slerpQuaternions(cgQ2, QI, e); held = 1 - e; }
+  } else if (SM.on) {                           // reduced motion: it stays where it is and simply glows
+    if (t >= T.t3 && t < T.t4) SM.drawK = Math.max(0, Math.sin(Math.PI * Math.min(1, ((t - T.t3) / T.draw) * 1.15))) ** 0.6;
+  }
+  if (SM.on) {
+    if (t >= T.t3 && !SM.in) { SM.in = true; AU.breath('in'); }
+    if (t >= T.t4) SM.warm = 1;
+    if (t >= T.t4 + 0.12 && !SM.out) breatheOut(time);
+    if (t >= T.t5) {
+      if (SM.tap) {                             // two small knocks on the rim; the ash lets go on the first
+        const x = (t - T.t5) / T.tap;
+        if (x < 1) rotAbout(o, it.home.p, it.side, Math.sin(x * Math.PI * 4) * 0.045 * (1 - x));
+        if (x > 0.12 && !SM.tapped) { SM.tapped = true; SM.ashTo = 0.3; whisper(C.CIGAR_ASH, 3200); }
+      }
+      if (t >= T.t5 + (SM.tap ? T.tap : 0)) { SM.on = false; it.busy = false; if (!SM.tap) SM.ashTo += SM.ashTo < 1 ? 0.35 : 0.2; }
+    }
+  }
+  c.held = held;
+  if (q !== QI) {
+    o.quaternion.copy(q).multiply(it.home.q);
+    o.position.copy(F).sub(tmpV4.copy(c.footL).applyQuaternion(q));
+  }
+  c.qd.copy(q);
+  // the ash: longer after every draw, short again once it has been knocked off (it falls faster than it grows)
+  SM.ash += (SM.ashTo - SM.ash) * (1 - Math.exp(-dt * (SM.ashTo < SM.ash ? 14 : 1.2)));
+  if (c.pivot) c.pivot.scale.set(SM.ash, 1, 1);
+}
+function updateCigarFx(dt, time) {
+  const c = CIGAR, o = c.it.obj;
+  c.emberW.copy(c.emberL).applyQuaternion(c.qd).add(o.position);
+  c.focus.copy(c.midL).applyQuaternion(c.qd).add(o.position);
+  SM.warm = Math.max(0, SM.warm - dt / 7);
+  // the ember: a breath of red at rest, white-orange while you draw on it, then it settles
+  const flick = 0.9 + 0.1 * (Math.sin(time * 9.1) * 0.6 + Math.sin(time * 23.7 + 1) * 0.4);
+  const k = Math.max(SM.drawK * (0.85 + 0.15 * Math.sin(time * 31)), SM.warm * SM.warm * 0.35);
+  tmpV.subVectors(camera.position, c.emberW).normalize();
+  c.glow.position.copy(c.emberW).addScaledVector(tmpV, 0.011).addScaledVector(tmpV2.copy(c.a0).applyQuaternion(c.qd), -0.003);
+  c.glow.scale.setScalar(lerp(0.035, 0.10, k));
+  c.glow.material.opacity = (0.10 * flick + 0.85 * k) * (lens ? 0.8 : 1);
+  c.glow.material.color.setRGB(1, lerp(0.30, 0.52, k), lerp(0.05, 0.16, k));
+  // the wisp rises from wherever the lit end is: thin in the hand, nothing while air is being pulled through it,
+  // and a good deal more for a while after it has been drawn on
+  if (smoke) {
+    smoke.position.copy(c.emberW); smoke.position.y += 0.006;
+    const inMouth = SM.on && SM.t > CG_T.t2 + 0.3 && SM.t < CG_T.t4 + 0.4;
+    const want = inMouth ? 0 : lerp(0.2 + 0.22 * SM.warm, 0.13, c.held);
+    c.wisp += (want - c.wisp) * (1 - Math.exp(-dt * 3));
+    smoke.scale.setScalar(lerp(1, 0.42, c.held));
+    smoke.material.uniforms.uWidth.value = 1 + 0.7 * SM.warm * (1 - c.held);
+  }
+  const p = c.puff;
+  if (p.visible) { p.material.uniforms.uTime.value = time; if (!p.userData.active(time)) p.visible = false; }
+}
+
 // ---------------------------------------------------------------- per-frame: objects
 const sleeveQ = new THREE.Quaternion(), basis = new THREE.Matrix4(), bx = new THREE.Vector3(), bz = new THREE.Vector3();
 let platterAngle = 0;
@@ -716,6 +852,7 @@ function updateItems(dt, time) {
       case 'lean': rotAbout(o, it.front, it.side, e * 0.12 + hn * 0.03); o.position.y += e * 0.006; break;
       case 'nudge': o.position.y += e * 0.006 + hn * 0.003; rotAbout(o, it.center, UP, e * 0.06); break;
       case 'slide': o.position.addScaledVector(it.out, e * 0.025 + hn * 0.004); break;
+      case 'cigar': if (CIGAR) { poseCigar(it, dt, time); if (it.busy) hl = 0; else o.position.y += hn * 0.004; } break;
       case 'lid': rotAbout(o, it.back, it.side, -(e * 0.07 + hn * 0.025)); break;
       case 'door': rotAbout(o, it.home.p, UP, it.swing * (e * 0.3 + hn * 0.03)); break;
       case 'dip': o.position.y -= Math.sin(Math.min(1, it.pulse) * Math.PI) * 0.004 + hn * 0.001; break;
@@ -779,7 +916,8 @@ function updateAtmos(dt, time) {
     w.material.uniforms.uTime.value = time;
     w.rotation.y = Math.atan2(camera.position.x - w.position.x, camera.position.z - w.position.z);
   }
-  if (smoke) smoke.material.uniforms.uAlpha.value = 0.2;
+  if (smoke) smoke.material.uniforms.uAlpha.value = CIGAR ? CIGAR.wisp : 0.2;
+  if (CIGAR) updateCigarFx(dt, time);
   if (steam) steam.material.uniforms.uAlpha.value = 0.08;
   if (sky) { const u = sky.material.uniforms; u.uTime.value = time; u.uMoon2.value = moon.a; }
   if (dust) { dust.material.uniforms.uTime.value = time; dust.material.uniforms.uScale.value = innerHeight * renderer.getPixelRatio(); }
@@ -820,7 +958,10 @@ function adapt(dt) {
 const FOCUS_AT = { bar: [0.5, 0.5], records: [0.5, 0.52], hifi: [0.5, 0.5], table: [0.5, 0.5], window: [0.42, 0.5], stairs: [0.5, 0.62] };
 const fwd = new THREE.Vector3();
 function updateFocus() {
-  if (open && open.item) {
+  if (CIGAR && CIGAR.held > 0.5 && !open) {            // in the hand: the lens follows the cigar, the room goes soft
+    camera.getWorldDirection(fwd);
+    lens.focusAt(Math.max(0.14, tmpV.copy(CIGAR.focus).sub(camera.position).dot(fwd)));
+  } else if (open && open.item) {
     const it = open.item; it.obj.updateMatrixWorld();
     const c = it.lbox.getCenter(tmpV).applyMatrix4(it.obj.matrixWorld);
     camera.getWorldDirection(fwd);
@@ -835,9 +976,10 @@ function frame(now) {
   clockT += dt;
   const time = clockT;
   if (pendingMove && now - lastPick > 90) { lastPick = now; const [x, y] = pendingMove; pendingMove = null; hoverAt(x, y); }
+  adapt(rdt);        // before drawing: a step down resizes the canvas, which clears it, and done after drawing that showed as one black frame
   updateCamera(dt, time); updateItems(dt, time); updateAtmos(dt, time); updateStrange(dt, Math.min(rdt, 0.5));
   if (lens) { updateFocus(dt); lens.render(scene, camera, dt, time); } else renderer.render(scene, camera);
-  updateMarks(time); adapt(rdt);
+  updateMarks(time);
   frames++;
   if (frames === 2) {
     $('#loading').classList.add('done'); document.body.dataset.ready = '1';
@@ -874,6 +1016,8 @@ window.__poc = {
   close: closePanel,
   cat: (name) => setCat(name),
   settle,
+  smoke: (t, hold) => { startPuff(); if (CIGAR && t !== undefined) { SM.t = t; SM.hold = !!hold; } },   // jump to a moment of the puff (and stay there)
+  skip: (sec) => { clockT += sec; if (SM.on && !SM.hold) SM.t += sec; },     // jump the room's clock forward (slow software-GL screenshots)
   ring: (holdMs) => startRing(holdMs),      // holdMs: keep the line up longer (slow software-GL screenshots)
   moon: (sec) => { moon.need = sec; },
   res: (r) => { perf.locked = true; perf.ratio = r; renderer.setPixelRatio(r); resize(); },
@@ -883,7 +1027,7 @@ window.__poc = {
   info: () => ({
     stop, tween: !!tween, open: open && { group: open.group, index: open.index, slug: open.slug },
     lens: lens ? lens.info() : null, cat: catPose, frames, ratio: perf.ratio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
-    sound: AU.state(), rang, ringing: ring.on, ringAt: ring.at, moon2: moon.on, moonDwell: +moon.dwell.toFixed(1), missing: MISSING,
+    sound: AU.state(), rang, cigar: CIGAR ? { on: SM.on, t: +SM.t.toFixed(2), puffs: SM.puffs, ash: +SM.ash.toFixed(2), held: +CIGAR.held.toFixed(2) } : null, ringing: ring.on, ringAt: ring.at, moon2: moon.on, moonDwell: +moon.dwell.toFixed(1), missing: MISSING,
     homes: Object.fromEntries(ITEMS.map((x) => [x.name, x.stop])), regions: REGIONS.map((r) => r.stop),
   }),
   dbg: { scene, camera, renderer, ITEMS, STOPS, staticMeshes, grid: () => grid, THREE, lens: () => lens },

@@ -2,6 +2,7 @@
  "atlases": [
   "cat",
   "counter",
+  "counter_b",
   "hifi",
   "hifi_b",
   "lounge",
@@ -13,6 +14,7 @@
  "meshes": {
   "shell_static": "shell",
   "counter_static": "counter",
+  "counter_b_static": "counter_b",
   "shelves_static": "shelves",
   "shelves_b_static": "shelves_b",
   "hifi_b_static": "hifi_b",
@@ -27,6 +29,8 @@
   "matchbook": "counter",
   "cigarbox": "counter",
   "paperback": "counter",
+  "cigar": "counter_b",
+  "cigar_ash": "counter_b",
   "reel_l": "hifi",
   "reel_r": "hifi",
   "platter_record": "hifi_b",
@@ -304,9 +308,24 @@
  ],
  "points": {
   "smoke": [
-   0.4,
-   1.07,
-   0.52
+   0.3937,
+   1.0491,
+   0.511
+  ],
+  "cigar_foot": [
+   0.3862,
+   1.0425,
+   0.5003
+  ],
+  "cigar_ember": [
+   0.396,
+   1.0432,
+   0.5143
+  ],
+  "cigar_head": [
+   0.4736,
+   1.0489,
+   0.6251
   ],
   "stairs_glow": [
    -2.7,

@@ -30,7 +30,8 @@ blender/           the source of the 3D room: Python scripts that build it in Bl
   SPEC.md          the creative brief and the rules every part follows
   barkit/          shared layout, modelling kit and the build / bake / export pipeline
   parts/<part>/    one script per part: shell, counter, shelves, hifi, nook, lounge, cat
-tools/             bundle.py (single-file HTML build), shot.py (headless screenshots)
+tools/             bundle.py (single-file HTML build), shot.py (headless screenshots),
+                   glbdiff.py / glbkeep.py (compare two exports; keep an untouched mesh's old UVs)
 docs/              screenshots used in this README
 ```
 
@@ -44,7 +45,31 @@ python3 -m http.server 8080 --directory site
 It must be served over http (not opened as a file), because the page loads modules and textures.
 
 Useful while testing: `#nolens` shows the bare bake without the lens, `#cat=sleep|sit|watch`
-picks where the cat is, and `#post-first-pressing` style links open a panel directly.
+picks where the cat is, and `#post-first-pressing` style links open a panel directly. In the console,
+`__poc.smoke()` takes a puff and `__poc.smoke(1.6, true)` freezes one 1.6 s in.
+
+### The cigar
+
+The cigar in the ashtray is the one thing in the room you can use rather than read. Click it (from
+the bar stool): it is lifted and held up for a moment, goes to the mouth, the lit end glows as you
+draw, and the smoke is let out into the room while it goes back to its notch. The ash gets longer
+with each draw and is knocked off on about the third. With the sound on you hear the draw and the
+breath out. With "reduce motion" set in the system it stays in the ashtray and simply glows and smokes.
+
+| Held up | Let out |
+|---|---|
+| ![The cigar held up](docs/cigar.jpg) | ![Smoke in the lamplight](docs/smoke.jpg) |
+
+It is a 6 × 47 perfecto (152 mm, nipple foot, full belly, rounded head) in the manner of a Hemingway
+Signature, with a reddish Cameroon-style wrapper; the shape lives in `cigar_r()` in
+`blender/parts/counter/build.py`, the leaf and the band are painted in `blender/parts/counter/tex.py`
+(`cigar_leaf`, `cigar_ring`). The band is the house marque that is also on the cigar box, not a real
+maker's. In the model it is two meshes, `cigar` and `cigar_ash`, which share a small atlas of their
+own with the ashtray (`counter_b`, 1024 px), so a change to the cigar is a four-minute bake
+(`run.py bake counter_b`, `run.py post counter_b`) and not the whole counter. Where it lies comes from
+`layout.CIGAR`, and `scene.json` carries three points on its centre line (`cigar_foot`, `cigar_ember`,
+`cigar_head`) that the page poses it from. The timings are `CG_T` in `site/main.js`; the smoke is
+`makePuff()` in `site/fx.js`.
 
 ### The lens
 
@@ -119,7 +144,7 @@ font paths at the top of each `blender/parts/*/tex.py` or run this step in a Lin
 ```bash
 blender/make_textures.sh        # paint labels, posters, covers (once, and after editing any tex.py)
 blender/bake_all.sh --test      # quick low-resolution run, about 2 minutes: checks everything works
-blender/bake_all.sh             # full bake: 9 atlases at 2048 px, 64 samples + denoise (slow on 2 CPU cores; see below)
+blender/bake_all.sh             # full bake: 10 atlases (2048 px; the small counter_b at 1024), 64 samples + denoise (slow on 2 CPU cores; see below)
 ```
 
 `bake_all.sh` overwrites `site/bar.glb`, `site/scene.json` and `site/tex/*.jpg`. Every atlas is
@@ -143,6 +168,11 @@ Where things live:
 - For better quality, raise `BAR_SPP` / `BAR_RES` (read in `barkit/pipeline.py`) and bake on a
   machine with more cores. Cycles runs on CPU here; switching `cycles_setup()` to a GPU device makes
   high sample counts practical.
+- The `shelves` atlas does not pack the same way twice. After an `assemble` + `export` for some other
+  part, `tools/glbdiff.py old.glb new.glb` shows which meshes moved in UV space; for the ones you did
+  not touch, either bake their atlas again or keep their old UVs with
+  `tools/glbkeep.py old.glb site/bar.glb shelves_static` (it copies them across only if the geometry
+  is identical), so the texture already in `site/tex/` stays valid.
 - Adding a post means adding a sleeve in `blender/parts/shelves/` (cover art in its `tex.py`),
   re-baking the `shelves` and `shelves_b` atlases, and adding the text in `site/content.js`.
 

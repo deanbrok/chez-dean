@@ -24,6 +24,23 @@ COUNTER_LAMP = (-0.05, -0.42)                                         # small br
 # the still life on the counter, as seen from the stool (x, y); binding to within a few cm:
 STILL_LIFE = dict(lamp=COUNTER_LAMP, whisky_glass=(0.16, -0.70), ashtray=(0.40, -0.52), second_drink=(0.72, -0.60),
                   note=(0.0, -0.80), matchbook=(0.34, -0.74), cigarbox=(0.78, -0.38), paperback=(-0.30, -0.80))
+# the cigar in the ashtray: a 6 x 47 perfecto (152 mm long, 18.7 mm at its widest), resting in the notch that points -55 deg,
+# lit end over the dish. Everything about where it lies comes from here (the modeller AND the web page use these numbers).
+CIGAR = dict(angle=-55.0, length=0.1524, radius=0.00933,
+             s_foot=-0.024, s_notch=0.060,      # distance from the ashtray centre along the notch direction: foot tip, resting point
+             z_notch=0.0262 - 0.0095,           # height of the notch floor above the counter top
+             drop=0.0035,                       # how much lower the foot's centre is than the centre at the notch
+             burn=0.017,                        # distance from the foot tip to the burn line (everything before it is ash)
+             band=(0.112, 0.128))               # the paper band, as distances from the foot tip
+def cigar_point(d, up=0.0):
+    """room coordinates of the point on the cigar's centre line d metres from the foot tip (+ up metres above it)"""
+    c = CIGAR; a = math.radians(c['angle']); ax, ay = STILL_LIFE['ashtray']
+    slope = c['drop'] / (c['s_notch'] - c['s_foot'])
+    n = math.sqrt(1 + slope * slope)
+    ux, uy, uz = math.cos(a) / n, math.sin(a) / n, slope / n
+    zf = COUNTER['top_z'] + c['z_notch'] + c['radius'] - c['drop']
+    return (ax + math.cos(a) * c['s_foot'] + ux * d, ay + math.sin(a) * c['s_foot'] + uy * d, zf + uz * d + up)
+CIGAR_REST = 0.084                                 # the point (distance from the foot tip) that sits in the notch = the cigar's pivot
 TURNTABLE = dict(x0=-0.88, x1=-0.40, y0=-0.70, y1=-0.32, z=1.02)      # reserved on the counter for the hi-fi agent
 # hero view sees the counter top only for |x| < ~0.9 (far edge) / ~0.47 (near edge): the "still life" lives there.
 
@@ -131,6 +148,8 @@ def _I():
         cigarbox=('counter', (0.78, -0.38, 1.02), (0.24, 0.18, 0.06)),
         matchbook=('counter', (0.34, -0.74, 1.02), (0.05, 0.04, 0.012)),
         paperback=('counter', (-0.30, -0.80, 1.02), (0.13, 0.19, 0.05)),  # face-down, tented open
+        cigar=('counter', cigar_point(CIGAR_REST), (0.09, 0.13, 0.02)),      # the perfecto in the ashtray: body + band + ember; pivot in the notch
+        cigar_ash=('counter', cigar_point(CIGAR['burn']), (0.012, 0.016, 0.012)),  # its ash, a separate piece (it grows and is tapped off); pivot on the burn line
         platter_record=('hifi', (-0.69, -0.51, 1.115), (0.30, 0.30, 0.004)),   # pivot = spindle; spins about Z
         tonearm=('hifi', (-0.47, -0.37, 1.13), (0.04, 0.24, 0.03)),      # pivot = arm pivot; swings about Z
         reel_l=('hifi', (-1.13, 1.26, 1.24), (0.18, 0.02, 0.18)),        # pivot = hub; spins about Y
@@ -155,7 +174,8 @@ def _I():
 INTERACTIVE = _I()
 
 # points the web page animates around (Blender coords)
-POINTS = dict(smoke=(0.40, -0.52, 1.07), stairs_glow=(-2.7, 3.2, -0.8), phone=(-3.28, 0.75, 1.1), spindle=(-0.69, -0.51, 1.12),
+POINTS = dict(smoke=cigar_point(CIGAR['burn'] - 0.004, 0.006), cigar_foot=cigar_point(0.0), cigar_ember=cigar_point(CIGAR['burn']),
+              cigar_head=cigar_point(CIGAR['length']), stairs_glow=(-2.7, 3.2, -0.8), phone=(-3.28, 0.75, 1.1), spindle=(-0.69, -0.51, 1.12),
               valves=(0.57, 1.30, 1.10), hob=(2.45, 3.25, 0.95))
 
 def three(p):
