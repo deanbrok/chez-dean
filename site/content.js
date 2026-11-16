@@ -188,9 +188,9 @@ export const ODDS = {
 
 // ---------------------------------------------------------------- the paperback on the counter
 export const PAPERBACK = {
-  title: 'Seven Rooms Below the Station', author: 'Haru Okabe', price: '¥480', page: 'p. 211 of 340',
-  blurb: 'A night porter at a station hotel discovers that the service lift stops at a floor that is not on any plan. He decides not to mention it. Then he decides to go and look.',
-  note: 'Reading it slowly, one chapter after closing. Halfway through and still not sure whether it is a ghost story or a book about work. Possibly both. (Invented book; sample content.)',
+  title: 'Norwegian Wood', author: 'Haruki Murakami', price: '¥480', page: 'p. 142',
+  blurb: 'Tokyo, the late sixties. A quiet student is caught between two young women: one slowly withdrawing from the world, one who walks straight into his life. Years later, a song heard by chance brings it all back.',
+  note: 'Reading it again, one chapter after closing. It reads differently down here, with a record still turning. (Sample note.)',
 };
 
 // ---------------------------------------------------------------- the pay phone: contact

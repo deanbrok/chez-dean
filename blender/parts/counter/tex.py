@@ -349,69 +349,59 @@ def p_keys(w, h):
     return im
 
 def p_book(w, h):
-    """full cover spread: back | spine | front ; 1970s paperback, worn"""
+    """full cover spread: back | spine | front ; a plain, well-read paperback of Norwegian Wood (typographic, no art)"""
     bw = int(w * 0.465); sw = w - 2 * bw   # back, spine, front widths
-    org = (196, 88, 30); mus = (214, 162, 52); grn = (40, 72, 52); crm = (236, 222, 190); dk = (30, 20, 16)
-    im = Image.new('RGBA', (w, h), (*org, 255)); d = ImageDraw.Draw(im)
-    # FRONT (right): flat 70s illustration: river bands, a pale moon, a broken bridge stub
+    crm = (230, 221, 198); grn = (34, 58, 44); ink = (32, 28, 24); mut = (96, 104, 92)
+    im = paper(w, h, crm, seed=94, grain=7, stain=0.35).convert('RGBA'); d = ImageDraw.Draw(im)
     fx = bw + sw
-    d.rectangle((fx, 0, w, h), fill=(*org, 255))
-    for k, c in enumerate([mus, (226, 120, 40), grn, (24, 46, 38)]):
-        y0 = int(h * (0.50 + 0.07 * k))
-        d.rectangle((fx, y0, w, y0 + int(h * 0.07)), fill=(*c, 255))
-    d.rectangle((fx, int(h * 0.78), w, h), fill=(*crm, 255))
-    d.ellipse((fx + bw * 0.55, h * 0.16, fx + bw * 0.85, h * 0.16 + bw * 0.30), fill=(*crm, 255))
-    d.rectangle((fx + bw * 0.04, h * 0.40, fx + bw * 0.32, h * 0.43), fill=(*dk, 255))       # bridge deck that stops
-    for px in (0.08, 0.2, 0.30): d.rectangle((fx + bw * px, h * 0.43, fx + bw * px + 8, h * 0.64), fill=(*dk, 255))
-    text_c(d, fx + bw / 2, h * 0.04, "HOLLIS AKER", F(F_POP_B, int(h * 0.05)), (*crm, 255), spacing=3)
-    text_c(d, fx + bw / 2, h * 0.795, "SLOW RIVER,", F(F_CAL_B, int(h * 0.07)), (*dk, 255))
-    text_c(d, fx + bw / 2, h * 0.87, "NO BRIDGE", F(F_CAL_B, int(h * 0.07)), (*dk, 255))
-    text_c(d, fx + bw / 2, h * 0.955, "a novel", F(F_CAL_I, int(h * 0.03)), (*dk, 255))
-    d.rectangle((fx + 14, 14, fx + 70, 70), fill=(*crm, 255)); text_c(d, fx + 42, 22, "P", F(F_SERIF_B, 36), (*org, 255))
-    text_c(d, w - 50, 26, "$1.50", F(F_SANS_B, 18), (*crm, 255))
-    # SPINE
-    d.rectangle((bw, 0, bw + sw, h), fill=(*dk, 255))
+    # FRONT (right): thin green frame, author, title, nothing else
+    m = int(bw * 0.07)
+    d.rectangle((fx + m, m, w - m, h - m), outline=(*grn, 255), width=3)
+    d.rectangle((fx + m + 9, m + 9, w - m - 9, h - m - 9), outline=(*grn, 200), width=1)
+    cx = fx + bw / 2
+    text_c(d, cx, h * 0.15, "HARUKI MURAKAMI", lora(int(h * 0.034), wght=500), (*ink, 255), spacing=5)
+    d.line((cx - bw * 0.10, h * 0.245, cx + bw * 0.10, h * 0.245), fill=(*grn, 255), width=2)
+    text_c(d, cx, h * 0.33, "Norwegian", lora(int(h * 0.088), italic=True, wght=500), (*grn, 255))
+    text_c(d, cx, h * 0.44, "Wood", lora(int(h * 0.088), italic=True, wght=500), (*grn, 255))
+    text_c(d, cx, h * 0.80, "a novel", lora(int(h * 0.032), italic=True), (*mut, 255))
+    # SPINE: deep green, cream lettering
+    d.rectangle((bw, 0, bw + sw, h), fill=(*grn, 255))
     sp = Image.new('RGBA', (h, sw), (0, 0, 0, 0)); ds = ImageDraw.Draw(sp)
-    ds.text((h * 0.05, sw * 0.18), "SLOW RIVER, NO BRIDGE", font=F(F_POP_B, int(sw * 0.46)), fill=(*mus, 255))
-    ds.text((h * 0.66, sw * 0.24), "HOLLIS AKER", font=F(F_POP_B, int(sw * 0.36)), fill=(*crm, 255))
-    ds.rectangle((h * 0.90, sw * 0.12, h * 0.96, sw * 0.88), fill=(*org, 255))
+    ds.text((h * 0.06, sw * 0.22), "NORWEGIAN WOOD", font=lora(int(sw * 0.40), wght=600), fill=(*crm, 255))
+    ds.text((h * 0.70, sw * 0.28), "MURAKAMI", font=lora(int(sw * 0.32), wght=500), fill=(*crm, 235))
     im.alpha_composite(sp.rotate(-90, expand=True), (bw, 0))
-    # BACK (left): blurb in a cream panel
-    d.rectangle((0, 0, bw, h), fill=(*org, 255))
-    d.rectangle((bw * 0.08, h * 0.08, bw * 0.92, h * 0.80), fill=(*crm, 255))
-    fb = F(F_CAL_B, int(h * 0.034)); fs = F(F_CAL, int(h * 0.022))
-    text_c(d, bw / 2, h * 0.11, "The river had always been", fb, (*dk, 255))
-    text_c(d, bw / 2, h * 0.155, "there. The bridge had not.", fb, (*dk, 255))
-    words = ("one summer a ferryman's daughter counts the boats that never come back and the letters that keep arriving "
-             "from a town upstream which no map in the house admits to and her brother insists the water runs the wrong way "
-             "on tuesdays").split()
-    y = h * 0.23; line = ''
+    # BACK (left): a few lines of plain blurb, the price
+    fb = lora(int(h * 0.036), italic=True, wght=500); fs = lora(int(h * 0.026))
+    text_c(d, bw / 2, h * 0.14, "Tokyo, the late sixties.", fb, (*grn, 255))
+    words = ("A quiet student remembers the year he was caught between two young women: one who was slowly "
+             "withdrawing from the world, and one who walked straight into his life. Years later, a song "
+             "heard by chance brings all of it back.").split()
+    y = h * 0.25; line = ''
     for wd in words:
-        if d.textlength(line + ' ' + wd, font=fs) > bw * 0.72:
-            d.text((bw * 0.14, y), line.strip(), font=fs, fill=(*dk, 230)); y += h * 0.034; line = ''
+        if d.textlength(line + ' ' + wd, font=fs) > bw * 0.70:
+            text_c(d, bw / 2, y, line.strip(), fs, (*ink, 235)); y += h * 0.046; line = ''
         line += ' ' + wd
-    d.text((bw * 0.14, y), line.strip(), font=fs, fill=(*dk, 230))
-    text_c(d, bw / 2, h * 0.70, "“Strange and quietly exact.”", F(F_CAL_I, int(h * 0.026)), (*dk, 255))
-    text_c(d, bw / 2, h * 0.74, "— The Harbour Ledger", F(F_CAL, int(h * 0.022)), (*dk, 220))
-    text_c(d, bw / 2, h * 0.86, "PIGEONHOLE  FICTION", F(F_SANS_B, int(h * 0.028)), (*crm, 255), spacing=3)
-    # wear: cracked spine creases, whitened edges, faint coffee ring on the back
+    text_c(d, bw / 2, y, line.strip(), fs, (*ink, 235))
+    d.line((bw * 0.42, h * 0.78, bw * 0.58, h * 0.78), fill=(*grn, 255), width=2)
+    text_c(d, bw / 2, h * 0.86, "\u00a5480", lora(int(h * 0.030), wght=500), (*mut, 255))
+    # wear: cracked spine creases, whitened hinges, faint coffee ring on the back
     a = np.asarray(im).astype(np.float32)
     r = np.random.default_rng(91)
     for k in range(7):
         x = bw + sw * (0.15 + 0.7 * r.random()); y0 = r.random() * h * 0.3; y1 = h - r.random() * h * 0.3
         L = Image.new('L', (w, h), 0); ImageDraw.Draw(L).line((x, y0, x + r.normal() * 3, y1), fill=255, width=2)
-        m = np.asarray(L.filter(ImageFilter.GaussianBlur(0.8))).astype(np.float32)[..., None] / 255 * 0.7
-        a[..., :3] = a[..., :3] * (1 - m) + np.array(crm) * m
+        mm = np.asarray(L.filter(ImageFilter.GaussianBlur(0.8))).astype(np.float32)[..., None] / 255 * 0.6
+        a[..., :3] = a[..., :3] * (1 - mm) + np.array(crm) * mm
     for xe in (bw, bw + sw):                                  # hinge creases
         L = Image.new('L', (w, h), 0); ImageDraw.Draw(L).line((xe, 0, xe, h), fill=255, width=3)
-        m = np.asarray(L.filter(ImageFilter.GaussianBlur(1.5))).astype(np.float32)[..., None] / 255 * 0.45
-        a[..., :3] = a[..., :3] * (1 - m) + np.array(crm) * m
+        mm = np.asarray(L.filter(ImageFilter.GaussianBlur(1.5))).astype(np.float32)[..., None] / 255 * 0.45
+        a[..., :3] = a[..., :3] * (1 - mm) + np.array(crm) * mm
     yy, xx = np.mgrid[0:h, 0:w]
     ring = np.abs(np.hypot(xx - bw * 0.62, yy - h * 0.86) - bw * 0.26)
-    rm = np.clip(1 - ring / 5, 0, 1) * 0.35 * fbm(h, w, (30, 8), 92)
+    rm = np.clip(1 - ring / 5, 0, 1) * 0.30 * fbm(h, w, (30, 8), 92)
     a[..., :3] *= 1 - rm[..., None] * np.array([0.25, 0.4, 0.6])
     im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
-    return wear_edges(im, 0.55, 93, (232, 218, 186), 7)
+    return wear_edges(im, 0.5, 93, (238, 230, 210), 7)
 
 def p_score(w, h):
     im = paper(w, h, (232, 228, 210), seed=101, grain=6, stain=0.4).convert('RGBA'); d = ImageDraw.Draw(im)
