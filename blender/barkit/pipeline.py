@@ -24,10 +24,10 @@ def new_scene():
 def cycles_setup(samples=16):
     sc.render.engine = 'CYCLES'; c = sc.cycles
     c.device = 'CPU'; c.samples = samples; c.use_denoising = True; c.denoiser = 'OPENIMAGEDENOISE'
-    c.use_adaptive_sampling = True; c.adaptive_threshold = 0.02
-    c.max_bounces = 6; c.diffuse_bounces = 3; c.glossy_bounces = 3; c.transmission_bounces = 6; c.transparent_max_bounces = 6
+    c.use_adaptive_sampling = True; c.adaptive_threshold = 0.01
+    c.max_bounces = 8; c.diffuse_bounces = 4; c.glossy_bounces = 4; c.transmission_bounces = 8; c.transparent_max_bounces = 8
     c.caustics_reflective = False; c.caustics_refractive = False
-    c.sample_clamp_indirect = 5.0; c.blur_glossy = 0.6
+    c.sample_clamp_indirect = 8.0; c.blur_glossy = 0.4
     sc.render.threads_mode = 'FIXED'; sc.render.threads = THREADS
     sc.view_settings.view_transform = 'Standard'
 
@@ -75,25 +75,17 @@ def light(name, kind, loc, energy, col, extra):
 
 def add_lights():
     for (name, kind, loc, energy, col, extra) in list(layout.LIGHTS) + EXTRA_LIGHTS:
-        assert name[:2] in ('N_', 'D_', 'B_'), 'light name must start with N_ (night) D_ (day) or B_ (both): ' + name
+        assert name[:2] in ('N_', 'B_'), 'light name must start with N_ (room lamps) or B_ (always on): ' + name
         light('L' + name, kind, loc, energy, col, extra)
     sc.world = bpy.data.worlds.new('w')
     try: sc.world.use_nodes = True
     except Exception: pass
 
-def set_mode(mode):
-    """'night' or 'day': toggles lights LN_/LD_, switches EMN_ emitters off by day, sets the world colour"""
+def set_mode(mode='night'):
+    """the bar only exists at night now: every light on, the world colour set. (Kept as a function so old calls work.)"""
+    assert mode == 'night', 'there is no day bake any more'
     for o in sc.objects:
-        if o.type == 'LIGHT':
-            on = o.name.startswith('LB_') or o.name.startswith('LN_' if mode == 'night' else 'LD_')
-            o.hide_render = not on; o.hide_viewport = not on
-    for m in bpy.data.materials:
-        if m.name.startswith('EMN_') and m.node_tree:
-            for n in m.node_tree.nodes:
-                if n.type == 'BSDF_PRINCIPLED':
-                    s = n.inputs['Emission Strength']
-                    if 'night_strength' not in m: m['night_strength'] = s.default_value
-                    s.default_value = m['night_strength'] if mode == 'night' else 0.0
+        if o.type == 'LIGHT': o.hide_render = False; o.hide_viewport = False
     bg = sc.world.node_tree.nodes.get('Background')
     if bg: bg.inputs[0].default_value = (*layout.WORLD[mode], 1); bg.inputs[1].default_value = 1.0
 
@@ -208,6 +200,7 @@ def _bake(obs, name, res, kind, samples, margin, outdir):
     kw = dict(margin=margin, use_clear=True, target='IMAGE_TEXTURES', save_mode='INTERNAL')
     if 'margin_type' in bpy.ops.object.bake.get_rna_type().properties.keys(): kw['margin_type'] = 'EXTEND'
     if kind == 'combined': kw.update(type='COMBINED', pass_filter={'EMIT', 'DIRECT', 'INDIRECT', 'DIFFUSE', 'GLOSSY', 'TRANSMISSION'})
+    elif kind == 'normal': kw.update(type='NORMAL', normal_space='OBJECT')
     else: kw.update(type='DIFFUSE', pass_filter={'COLOR'})
     t0 = time.time()
     bpy.ops.object.bake(**kw)
@@ -216,21 +209,52 @@ def _bake(obs, name, res, kind, samples, margin, outdir):
     print('BAKED %s %s res=%d spp=%d  %.1fs  mean=%.4f  fill=%.2f' % (name, kind, res, samples, time.time() - t0, a[..., :3].mean(), (a[..., 3] > 0).mean()), flush=True)
     bpy.data.images.remove(img)
 
-def bake(atlas, modes=('night', 'day'), test=False, outdir=None, albedo=True):
-    """COMBINED (seen from the hero camera) at half res for each mode + DIFFUSE colour at full res -> <outdir>/*.npy"""
+# full-resolution light at 64 samples (adaptive), then OpenImageDenoise with albedo + normal guides (see denoise()).
+# Raise SPP / RES on a machine with more cores (or a GPU) for an even cleaner result.
+RES = int(os.environ.get('BAR_RES', '2048')); SPP = int(os.environ.get('BAR_SPP', '64'))
+
+def bake(atlas, modes=('night',), test=False, outdir=None, albedo=True):
+    """COMBINED (seen from the hero camera) + DIFFUSE colour + normals, all at full res -> <outdir>/*.npy"""
     outdir = outdir or os.path.join(OUT, 'bake'); os.makedirs(outdir, exist_ok=True)
     cycles_setup(); sc.camera = bpy.data.objects['cam_bar']
     bk = sc.render.bake; bk.view_from = 'ACTIVE_CAMERA'; bk.margin_type = 'EXTEND'; bk.target = 'IMAGE_TEXTURES'; bk.use_clear = True
-    lo, hi, spp = (256, 512, 6) if test else (1024, 2048, 24)
+    lo, hi, spp = (512, 512, 8) if test else (RES, RES, SPP)
     obs = group(atlas)
     assert obs, 'no objects in atlas ' + atlas
-    if len(obs) > 1:           # one joined object => one denoise pass (this scene is not saved afterwards)
+    if len(obs) > 1:           # one joined object => one bake (this scene is not saved afterwards)
         obs.sort(key=lambda o: not o.name.endswith('_static'))
         select_only(obs); bpy.ops.object.join(); obs = [bpy.context.view_layer.objects.active]
+    set_mode('night')
     if albedo:
-        set_mode('night'); _bake(obs, 'alb_' + atlas, hi, 'albedo', 4, 2 if test else 8, outdir)
+        _bake(obs, 'alb_' + atlas, hi, 'albedo', 4, 2 if test else 8, outdir)
+        _bake(obs, 'nrm_' + atlas, hi, 'normal', 1, 2 if test else 8, outdir)
     for mode in modes:
-        set_mode(mode); _bake(obs, 'cmb_%s_%s' % (atlas, mode), lo, 'combined', spp, 1 if test else 4, outdir)
+        _bake(obs, 'cmb_%s_%s' % (atlas, mode), lo, 'combined', spp, 2 if test else 8, outdir)
+
+def denoise(rgb, alb=None, nrm=None):
+    """OpenImageDenoise through Blender's compositor (float RGB arrays, top row first) -> denoised float RGB"""
+    H, W = rgb.shape[:2]
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    s2 = bpy.context.scene
+    s2.render.engine = 'BLENDER_WORKBENCH'; s2.render.use_compositing = True
+    s2.render.resolution_x = W; s2.render.resolution_y = H; s2.render.resolution_percentage = 100
+    def mk(name, a):
+        im = bpy.data.images.new(name, W, H, alpha=True, float_buffer=True)
+        b = np.ones((H, W, 4), np.float32); b[..., :3] = a; im.pixels.foreach_set(b[::-1].ravel()); return im   # float = linear
+    nt = bpy.data.node_groups.new('dn', 'CompositorNodeTree'); s2.compositing_node_group = nt
+    nt.interface.new_socket('Image', in_out='OUTPUT', socket_type='NodeSocketColor')
+    out = nt.nodes.new('NodeGroupOutput'); dn = nt.nodes.new('CompositorNodeDenoise')
+    i1 = nt.nodes.new('CompositorNodeImage'); i1.image = mk('src', rgb); nt.links.new(i1.outputs[0], dn.inputs['Image'])
+    for key, a in (('Albedo', alb), ('Normal', nrm)):
+        if a is None: continue
+        i = nt.nodes.new('CompositorNodeImage'); i.image = mk(key, a); nt.links.new(i.outputs[0], dn.inputs[key])
+    nt.links.new(dn.outputs[0], out.inputs[0])
+    s2.render.image_settings.file_format = 'OPEN_EXR'; s2.render.image_settings.color_depth = '32'
+    f = os.path.join(OUT, '_dn.exr'); s2.render.filepath = f
+    bpy.ops.render.render(write_still=True)
+    im = bpy.data.images.load(f); a = np.array(im.pixels[:], np.float32).reshape(H, W, 4)[::-1, :, :3]
+    bpy.data.images.remove(im); os.remove(f)
+    return a
 
 def _rs(a, size, f):
     from PIL import Image
@@ -247,23 +271,28 @@ def _fill(a, alpha, it=6):
         a[new] = acc[new] / cnt[new][..., None]; m = m | new
     return a, m
 
-def post(atlas, modes=('night', 'day'), bakedir=None, outdir=None, quality=88):
-    """detail transfer (full-res albedo x half-res light), tone-map, JPEG -> <outdir>/<atlas>_<mode>.jpg"""
+def post(atlas, modes=('night',), bakedir=None, outdir=None, quality=88, size=None):
+    """denoise (albedo + normal guided), tone-map, JPEG -> <outdir>/<atlas>.jpg"""
     from PIL import Image
     bakedir = bakedir or os.path.join(OUT, 'bake'); outdir = outdir or os.path.join(SITE, 'tex'); os.makedirs(outdir, exist_ok=True)
     alb = np.load(os.path.join(bakedir, 'alb_%s.npy' % atlas)).astype(np.float32); H = alb.shape[0]
     a, _ = _fill(alb[..., :3], alb[..., 3], 16)
+    pn = os.path.join(bakedir, 'nrm_%s.npy' % atlas)
+    nrm = None
+    if os.path.exists(pn):
+        n = np.load(pn).astype(np.float32); nrm, _ = _fill(n[..., :3] * 2 - 1, n[..., 3], 16)
     for mode in modes:
         p = os.path.join(bakedir, 'cmb_%s_%s.npy' % (atlas, mode))
         if not os.path.exists(p): continue
         cmb = np.load(p).astype(np.float32)
         c, _ = _fill(cmb[..., :3], cmb[..., 3], 8)
-        up = _rs(c, H, Image.BILINEAR)
-        lp = _rs(_rs(a, cmb.shape[0], Image.BOX), H, Image.BILINEAR)
-        ratio = np.clip((a + 0.004) / (lp + 0.004), 0.35, 2.8)
-        img = (tm.tonemap(up * ratio) * 255 + 0.5).astype(np.uint8)
-        f = os.path.join(outdir, '%s_%s.jpg' % (atlas, mode))
-        Image.fromarray(img).save(f, quality=quality, subsampling=0)
+        if c.shape[0] != H: c = _rs(c, H, Image.BILINEAR)
+        if os.environ.get('BAR_NODENOISE') != '1': c = np.maximum(denoise(c, a, nrm), 0)
+        img = (tm.tonemap(c) * 255 + 0.5).astype(np.uint8)
+        im = Image.fromarray(img)
+        if size and size != H: im = im.resize((size, size), Image.LANCZOS)
+        f = os.path.join(outdir, '%s.jpg' % atlas)
+        im.save(f, quality=quality, subsampling=0)
         print('POST %s  fill %.2f  mean %.1f  %d KB' % (f, (alb[..., 3] > 0).mean(), img.mean(), os.path.getsize(f) // 1024), flush=True)
 
 # ------------------------------------------------------------------ export
@@ -294,7 +323,7 @@ def scene_meta(names):
     L = list(layout.LIGHTS) + EXTRA_LIGHTS
     return dict(
         atlases=sorted(set(names.values())),
-        meshes=names,                                   # mesh/node name -> atlas (= material name; textures tex/<atlas>_night.jpg, _day.jpg)
+        meshes=names,                                   # mesh/node name -> atlas (= material name; texture tex/<atlas>.jpg)
         stops={k: dict(p=t(p), t=t(tg), fov=fov) for k, (p, tg, fov) in layout.STOPS.items()},
         glows=[dict(name=n, p=t(loc), color=[round(c, 3) for c in col], when=n[0]) for (n, kind, loc, e, col, ex) in L if kind == 'POINT'],
         window=dict(x=layout.WINDOW['x'], y0=layout.WINDOW['z0'], y1=layout.WINDOW['z1'], z0=-layout.WINDOW['y0'], z1=-layout.WINDOW['y1']),

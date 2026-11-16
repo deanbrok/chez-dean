@@ -66,8 +66,8 @@ STOPS = dict(
     stairs=((-2.30, 0.95, 1.60), (-2.68, 3.0, -0.60), 50),
 )
 
-# ---- lights. (name, kind, location, energy W, colour, extra) ; N = night only, D = day only, B = both ---------------
-WARM = (1.0, 0.66, 0.36); WARMER = (1.0, 0.56, 0.26); COLD = (0.30, 0.75, 0.80); MOON = (0.45, 0.60, 1.0); SUN = (1.0, 0.93, 0.80); SKY = (0.62, 0.78, 1.0)
+# ---- lights. (name, kind, location, energy W, colour, extra) ; N = room lamps (night), B = always on ---------------
+WARM = (1.0, 0.66, 0.36); WARMER = (1.0, 0.56, 0.26); COLD = (0.30, 0.75, 0.80); MOON = (0.45, 0.60, 1.0); SKY = (0.62, 0.78, 1.0)
 LIGHTS = []
 for i, (x, y) in enumerate(PENDANTS):
     LIGHTS.append(('N_pend%d' % i, 'POINT', (x, y, 1.96), 9, WARM, dict(radius=0.03)))
@@ -85,14 +85,8 @@ LIGHTS += [
     ('N_fill', 'AREA', (0.0, -2.2, 2.0), 4, (0.42, 0.56, 1.0), dict(shape='SQUARE', size=0.7, aim=(0.0, 0.6, 1.1))),
     ('N_lounge_fill', 'AREA', (-2.4, -1.9, 2.3), 5, (0.55, 0.62, 0.9), dict(shape='SQUARE', size=0.6, aim=(-3.3, -1.2, 0.9))),
     ('B_stairs', 'AREA', (-2.7, 4.2, -1.3), 55, COLD, dict(shape='SQUARE', size=0.8, aim=(-2.7, 2.2, 0.2))),
-    ('D_sun', 'SUN', (-6.6, -1.49, 2.90), 9.0, SUN, dict(angle=math.radians(1.2), aim=(-0.6, -0.55, 1.02))),
-    ('D_sky', 'AREA', (-3.7, -0.8, 1.9), 85, (0.74, 0.85, 1.0), dict(shape='RECTANGLE', size=1.4, size_y=0.75, aim=(0.0, -0.4, 1.0))),
-    ('D_fill', 'AREA', (0.0, -2.2, 2.0), 12, (0.80, 0.86, 1.0), dict(shape='SQUARE', size=0.8, aim=(0.0, 0.8, 1.0))),
-    ('D_bounce', 'AREA', (0.0, -0.3, 2.25), 70, (0.92, 0.94, 1.0), dict(shape='RECTANGLE', size=2.4, size_y=1.8, aim=(0.0, -0.3, 0.0))),
-    ('D_bounce_l', 'AREA', (-2.7, -0.6, 2.25), 22, (0.92, 0.94, 1.0), dict(shape='SQUARE', size=0.9, aim=(-2.7, -0.6, 0.0))),
-    ('D_nook_window', 'AREA', (3.3, 3.2, 1.6), 40, SKY, dict(shape='SQUARE', size=0.5, aim=(2.7, 2.5, 0.8))),
 ]
-WORLD = dict(night=(0.0015, 0.002, 0.004), day=(0.03, 0.035, 0.04))
+WORLD = dict(night=(0.0015, 0.002, 0.004))
 
 # ---- grey blockout of every zone, so each agent sees the rest of the room in previews: part -> [(x0,x1,y0,y1,z0,z1)] ----
 def _stairs():

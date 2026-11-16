@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Command line for the bar pipeline.  Always run as:  python3 blender/barkit/run.py <command> ...
 
-  preview <part> [--cam bar|records|hifi|table|window|stairs] [--mode night|day] [--res 640x360] [--spp 16]
+  preview <part> [--cam bar|records|hifi|table|window|stairs] [--res 640x360] [--spp 16]
                  [--at x,y,z --look x,y,z [--fov 40]]      custom close-up camera instead of --cam
                  [--with part,part]                        also build these other parts for real (if their build.py exists)
                  [--solo]                                  no blockout of the rest of the room
@@ -9,12 +9,12 @@
       Builds grey blockout of the other zones + your part + the room lights, renders to parts/<part>/shots/.
 
   baketest <part>
-      Builds your part (+ blockout), unwraps + packs its atlas(es), runs a LOW-RES test bake for night and day,
+      Builds your part (+ blockout), unwraps + packs its atlas(es), runs a LOW-RES test bake,
       writes parts/<part>/shots/<atlas>_<mode>.jpg and parts/<part>/shots/<part>.glb. Proves the part survives
       the real pipeline; look at the atlas images: nothing black / pink / missing, important things get enough texels.
 
   assemble                  (assembler only) all parts for real -> out/bar.blend
-  bake <atlas> [night|day|both] [--test]     (assembler only)
+  bake <atlas> [--test]     (assembler only)
   post [atlas]              (assembler only)
   export                    (assembler only) -> site/bar.glb + site/scene.json
 """
@@ -47,7 +47,7 @@ if cmd == 'preview':
     if opt('--at'):
         P.camera('cam_custom', vec(opt('--at')), vec(opt('--look')), float(opt('--fov', '40'))); cam = 'cam_custom'
     w, h = (int(v) for v in (opt('--res') or '640x360').split('x'))
-    mode = opt('--mode') or 'night'
+    mode = 'night'
     d = os.path.join(P.ROOT, 'parts', part, 'shots'); os.makedirs(d, exist_ok=True)
     out = os.path.join(d, 'preview_%s_%s%s.png' % (cam[4:], mode, ('_' + opt('--out')) if opt('--out') else ''))
     P.render(out, cam, mode, w, h, int(opt('--spp') or 16))
@@ -101,14 +101,13 @@ elif cmd == 'assemble':
 elif cmd in ('bake', 'render'):
     bpy.ops.wm.open_mainfile(filepath=os.path.join(P.OUT, 'bar.blend')); P.sc = bpy.context.scene
     if cmd == 'bake':
-        m = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith('--') else 'both'
-        P.bake(sys.argv[2], ('night', 'day') if m == 'both' else (m,), test='--test' in sys.argv, albedo='--noalbedo' not in sys.argv)
+        P.bake(sys.argv[2], test='--test' in sys.argv, albedo='--noalbedo' not in sys.argv)
     else:
         cam = 'cam_' + (opt('--cam') or 'bar')
         if opt('--at'):
             P.camera('cam_custom', vec(opt('--at')), vec(opt('--look')), float(opt('--fov', '40'))); cam = 'cam_custom'
         w, h = (int(v) for v in (opt('--res') or '960x540').split('x'))
-        mode = opt('--mode') or 'night'
+        mode = 'night'
         P.render(os.path.join(P.OUT, 'render_%s_%s.png' % (cam[4:], mode)), cam, mode, w, h, int(opt('--spp') or 24))
 elif cmd == 'post':
     meta = json.load(open(os.path.join(P.OUT, 'assemble.json')))

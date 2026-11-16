@@ -8,13 +8,13 @@ and `parts/example/build.py` (a working example part).
 
 A 3D personal website for Dean (a software engineer who loves jazz, vinyl, books, old maps,
 old-school and retro things, and fiction). The site is ONE room: a small basement jazz bar in Tokyo
-in the late 1970s — the kind a young novelist-to-be might have run: coffee shop by day, whisky and
-records at night, a cat that owns the place, and a kitchen table in the back where someone writes
+in the late 1970s — the kind a young novelist-to-be might have run: whisky and records,
+always seen at night (the day version was dropped in Nov 2026), a cat that owns the place, and a kitchen table in the back where someone writes
 after closing. The visitor sits on a bar stool. Different objects open different parts of the site.
 
 Several agents each MODEL ONE PART of the room in Blender (by Python script). One agent builds the
-web page. A separate assembler then puts all parts into one scene, lights it, bakes the lighting for
-NIGHT and for DAY, and exports it. You never see the other agents; this document and `layout.py`
+web page. A separate assembler then puts all parts into one scene, lights it, bakes the (night) lighting
+and exports it. You never see the other agents; this document and `layout.py`
 are the only coordination, so follow them exactly.
 
 ### The mood (art direction — binding)
@@ -26,7 +26,7 @@ are the only coordination, so follow them exactly.
   Understatement is the whole point: realism first, strangeness second, never spooky, never cute.
 - **Palette:** walnut and mahogany browns, tobacco, mustard/ochre, bottle green, burnt orange,
   oxblood leather, nicotine-cream plaster, aged brass. NIGHT = pools of warm tungsten light with deep
-  soft shadows. DAY = cool daylight from one high window, lamps off, dust and coffee. The ONLY cold
+  soft shadows. The ONLY cold
   colour in the room is a faint blue-green glow coming up the stairwell behind the half-open door.
 - **Specificity beats quantity.** A few objects modelled with love (real proportions, bevels,
   wear, a believable arrangement) beat a hundred boxes. Think "still life", not "inventory".
@@ -49,7 +49,7 @@ are the only coordination, so follow them exactly.
 | Manuscript page mid-sentence, pen uncapped; a pot of spaghetti on the hob | nook |
 | The wall clock is stopped; one of the two umbrellas in the stand is wet, with a small puddle | lounge |
 | The cat is somewhere different each visit | cat + web |
-| Two moons in the window, the phone that rings once, day/night by the visitor's clock | web |
+| Two moons in the window, the phone that rings once | web |
 
 ## 2. The room (summary — `layout.py` has the exact numbers)
 
@@ -124,8 +124,8 @@ Rules for `build()` (the assembler imports your file and calls it inside a scene
   painted image via `mats.image(name, ABSOLUTE_PATH)` with the mesh's `uv_tex` layer. EVERY material
   name starts with your part name (`shelves_walnut`). No network: no downloaded textures or models.
 - Light-emitting surfaces: `mats.emissive(name, colour, strength, night_only=True|False)`. Room lamps
-  are `night_only=True` (off in the day bake); things that are always on (hi-fi pilot lamps, valves)
-  are `night_only=False`. Lamp shades that should glow: `mats.shade_paper` around an emissive bulb.
+  are `night_only=True` (an `EMN_` material), things like hi-fi pilot lamps and valves
+  `night_only=False` (`EMA_`); there is only one (night) bake now, so both are lit. Lamp shades that should glow: `mats.shade_paper` around an emissive bulb.
 - Glass: `mats.glass`. Liquids: tinted glass. Keep it simple; it all gets baked.
 - Everything is baked into ONE 2048² texture atlas per part (hifi may use a second atlas
   `hifi_b`, shelves a second `shelves_b`, by wrapping some objects in `kit.props(atlas='shelves_b')`).
@@ -144,17 +144,17 @@ Your commands (never run two Blender processes at once; the machine has 2 cores 
 so a preview takes 20–90 s — budget about 25 previews in total, and think before each one):
 
 ```
-python3 blender/barkit/run.py preview <part> [--cam bar|records|hifi|table|window|stairs] [--mode night|day]
+python3 blender/barkit/run.py preview <part> [--cam bar|records|hifi|table|window|stairs]
         [--at x,y,z --look x,y,z --fov 40]  [--res 640x360] [--spp 16] [--solo] [--out suffix] [--with otherpart,...]
 python3 blender/barkit/run.py baketest <part>
 ```
 
 `preview` renders your part inside a grey blockout of the rest of the room, under the real room
 lights, to `parts/<part>/shots/`. `baketest` pushes your part through the real unwrap + bake + export
-pipeline at low resolution and writes `shots/<atlas>_night.jpg`, `shots/<atlas>_day.jpg` and
+pipeline at low resolution and writes `shots/<atlas>.jpg` and
 `shots/<part>.glb`. LOOK at every image you make (Read tool) and iterate until it is good.
 
-You are done when: (1) hero-relevant previews look right at NIGHT and in DAY mode from every camera
+You are done when: (1) hero-relevant previews look right from every camera
 stop that sees your part, plus close-ups of your best objects; (2) `baketest` prints `BAKETEST OK`,
 the atlas images show no black/pink/missing islands and the important objects clearly get the most
 texels; (3) triangle count is within budget (baketest prints it); (4) all your interactive names

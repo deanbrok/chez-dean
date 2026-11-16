@@ -4,10 +4,7 @@
 
 export const SAMPLE_NOTE = 'Sample content';
 
-export const SUBTITLE = {
-  day: 'Coffee, the morning paper, a record on low.',
-  night: 'Records, whisky, and the hours after closing.',
-};
+export const SUBTITLE = 'Records, whisky, and the hours after closing.';
 
 export const STOP_NAMES = {
   bar: 'The bar', records: 'Records', hifi: 'Turntable', table: 'Kitchen table', window: 'Window', stairs: 'Stairs',
@@ -165,8 +162,8 @@ export const ABOUT = {
 export const COLOPHON = {
   lines: [
     ['Room', 'Modelled in Blender, entirely by script, by several hands working to one floor plan.'],
-    ['Light', 'Baked twice, once for night and once for day, into texture atlases. Nothing is lit in your browser.'],
-    ['Page', 'three.js, plain HTML and CSS, no build step. The day and night follow your own clock.'],
+    ['Light', 'Path-traced once, after closing, and baked into texture atlases. Nothing is lit in your browser.'],
+    ['Page', 'three.js, plain HTML and CSS, no build step. The lens, the film grain and the glow are added as you look.'],
     ['Sound', 'Synthesised as you listen. Off unless you ask for it.'],
     ['Type', 'Playfair Display, EB Garamond and Oswald, when the network allows.'],
   ],
@@ -247,7 +244,7 @@ export const HELP = {
     'Move the mouse to look around a little; on a phone the room sways by itself.',
     'Click a part of the room to go there, or use the dial at the bottom, the arrow keys, 1–6, or a swipe.',
     'Small brass rings mark what opens. Records are posts, books are reading lists, bottles are projects.',
-    '♪ or the record on the turntable for sound. The sun and moon follow your clock unless you change them.',
+    '♪ or the record on the turntable for sound.',
     'Esc closes a page, then takes you back to your stool.',
   ],
   small: 'All text in this room is sample content.',

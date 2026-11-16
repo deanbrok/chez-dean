@@ -781,6 +781,4 @@ def build():
     nook()
     details()
 
-# a little daylight behind the nook's frosted pane (only in the day bake)
-LIGHTS = [('D_shell_nookwin', 'AREA', (layout.NOOK['x1'] + 0.32, 3.1, 1.70), 18, layout.SKY,
-           dict(shape='SQUARE', size=0.45, aim=(2.6, 3.1, 1.3)))]
+LIGHTS = []
