@@ -144,6 +144,9 @@ const grey = new THREE.DataTexture(new Uint8Array([90, 80, 70, 255]), 1, 1); gre
 
 const META = await fetch('./scene.json').then((r) => r.json()).catch(() => null);
 if (!META) { $('#err').textContent = 'The room could not be found (scene.json).'; throw new Error('scene.json'); }
+// the model and the baked textures are one bake: scene.json (never cached) carries that bake's stamp, and it goes on
+// their URLs so a browser cannot pair a cached texture from one bake with the model of another
+const VER = META.v ? '?v=' + encodeURIComponent(META.v) : '';
 const ATLASES = META.atlases || [...new Set(Object.values(META.meshes || {}))];
 progress.ntex = ATLASES.length;
 
@@ -167,14 +170,14 @@ function roomMat(atlas) {
 }
 const sharedMats = {};
 
-const firstTex = Promise.all(ATLASES.map((a) => loadTex(`./tex/${a}.jpg`).then((t) => {
+const firstTex = Promise.all(ATLASES.map((a) => loadTex(`./tex/${a}.jpg${VER}`).then((t) => {
   progress.tex++; showProgress();
   if (t) ATL[a].map.value = t;
 })));
 let gltf;
 try {
   [gltf] = await Promise.all([
-    new GLTFLoader().loadAsync('./bar.glb', (e) => { if (e.total) { progress.glb = e.loaded / e.total; showProgress(); } }),
+    new GLTFLoader().loadAsync('./bar.glb' + VER, (e) => { if (e.total) { progress.glb = e.loaded / e.total; showProgress(); } }),
     firstTex,
   ]);
 } catch (e) {

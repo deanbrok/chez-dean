@@ -15,9 +15,9 @@
 /scene.json
   Cache-Control: no-cache
 
-# The model and the baked textures belong to one bake and must change together with scene.json. Their names are not
-# hashed, so they revalidate on every visit too (a 304 when nothing changed): a day-long cache here once left visitors
-# with yesterday's model under today's textures after a re-bake.
+# The model and the baked textures belong to one bake. The page asks for them as bar.glb?v=<stamp> and
+# tex/<atlas>.jpg?v=<stamp>, with the stamp read from scene.json, so a re-bake changes their URLs; they also
+# revalidate on every visit (a 304 when nothing changed).
 /bar.glb
   Cache-Control: no-cache
 
