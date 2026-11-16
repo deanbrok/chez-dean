@@ -1,0 +1,27 @@
+# The page shell and code: always revalidate, so a new deploy shows up at once.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/index.html
+  Cache-Control: no-cache
+
+/*.js
+  Cache-Control: no-cache
+
+/style.css
+  Cache-Control: no-cache
+
+/scene.json
+  Cache-Control: no-cache
+
+# The heavy files (model, baked textures, three.js). File names are not hashed, so keep this to a day:
+# after a re-bake, visitors pick up the new files within 24 hours.
+/bar.glb
+  Cache-Control: public, max-age=86400
+
+/tex/*
+  Cache-Control: public, max-age=86400
+
+/vendor/*
+  Cache-Control: public, max-age=604800

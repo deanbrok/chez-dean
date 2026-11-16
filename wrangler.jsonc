@@ -1,0 +1,9 @@
+{
+  // Cloudflare Workers with static assets: serves the ./site folder as-is. No build step, no Worker code.
+  "name": "chez-dean",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site",
+    "not_found_handling": "404-page"
+  }
+}

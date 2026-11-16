@@ -1,0 +1,337 @@
+{
+ "atlases": [
+  "cat",
+  "counter",
+  "hifi",
+  "hifi_b",
+  "lounge",
+  "nook",
+  "shell",
+  "shelves",
+  "shelves_b"
+ ],
+ "meshes": {
+  "shell_static": "shell",
+  "counter_static": "counter",
+  "shelves_static": "shelves",
+  "shelves_b_static": "shelves_b",
+  "hifi_b_static": "hifi_b",
+  "hifi_static": "hifi",
+  "nook_static": "nook",
+  "lounge_static": "lounge",
+  "cat_static": "cat",
+  "cat_sleep": "cat",
+  "cat_sit": "cat",
+  "cat_watch": "cat",
+  "note": "counter",
+  "matchbook": "counter",
+  "cigarbox": "counter",
+  "paperback": "counter",
+  "reel_l": "hifi",
+  "reel_r": "hifi",
+  "platter_record": "hifi_b",
+  "tonearm": "hifi_b",
+  "nowplaying": "hifi_b",
+  "piano_keys": "lounge",
+  "phone": "lounge",
+  "mapframe": "lounge",
+  "clock_hour": "lounge",
+  "clock_min": "lounge",
+  "clock_sec": "lounge",
+  "manuscript": "nook",
+  "radio": "nook",
+  "door": "shell",
+  "rec_0": "shelves_b",
+  "rec_1": "shelves_b",
+  "rec_2": "shelves_b",
+  "rec_3": "shelves_b",
+  "rec_4": "shelves_b",
+  "rec_5": "shelves_b",
+  "book_0": "shelves_b",
+  "book_1": "shelves_b",
+  "book_2": "shelves_b",
+  "book_3": "shelves_b",
+  "bottle_0": "shelves_b",
+  "bottle_1": "shelves_b",
+  "bottle_2": "shelves_b",
+  "bottle_3": "shelves_b"
+ },
+ "stops": {
+  "bar": {
+   "p": [
+    0.0,
+    1.26,
+    1.6
+   ],
+   "t": [
+    0.05,
+    1.28,
+    -1.6
+   ],
+   "fov": 45
+  },
+  "records": {
+   "p": [
+    -0.1,
+    1.72,
+    0.5
+   ],
+   "t": [
+    -0.1,
+    1.71,
+    -1.45
+   ],
+   "fov": 46
+  },
+  "hifi": {
+   "p": [
+    -0.25,
+    1.52,
+    1.15
+   ],
+   "t": [
+    -0.62,
+    1.06,
+    0.5
+   ],
+   "fov": 40
+  },
+  "table": {
+   "p": [
+    2.55,
+    1.55,
+    -0.35
+   ],
+   "t": [
+    2.75,
+    0.8,
+    -2.55
+   ],
+   "fov": 45
+  },
+  "window": {
+   "p": [
+    -1.15,
+    1.35,
+    1.75
+   ],
+   "t": [
+    -3.4,
+    1.55,
+    0.55
+   ],
+   "fov": 50
+  },
+  "stairs": {
+   "p": [
+    -2.3,
+    1.6,
+    -0.95
+   ],
+   "t": [
+    -2.68,
+    -0.6,
+    -3.0
+   ],
+   "fov": 50
+  }
+ },
+ "glows": [
+  {
+   "name": "N_pend0",
+   "p": [
+    -1.9,
+    1.96,
+    0.15
+   ],
+   "color": [
+    1.0,
+    0.66,
+    0.36
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_pend1",
+   "p": [
+    -0.95,
+    1.96,
+    0.15
+   ],
+   "color": [
+    1.0,
+    0.66,
+    0.36
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_pend2",
+   "p": [
+    0.95,
+    1.96,
+    0.15
+   ],
+   "color": [
+    1.0,
+    0.66,
+    0.36
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_pend3",
+   "p": [
+    1.9,
+    1.96,
+    0.15
+   ],
+   "color": [
+    1.0,
+    0.66,
+    0.36
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_counter_lamp",
+   "p": [
+    -0.05,
+    1.28,
+    0.42
+   ],
+   "color": [
+    1.0,
+    0.66,
+    0.36
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_floor_lamp",
+   "p": [
+    -3.1,
+    1.45,
+    -0.2
+   ],
+   "color": [
+    1.0,
+    0.56,
+    0.26
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_nook_bulb",
+   "p": [
+    2.75,
+    1.75,
+    -2.55
+   ],
+   "color": [
+    1.0,
+    0.72,
+    0.42
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_tubes",
+   "p": [
+    0.57,
+    1.1,
+    -1.3
+   ],
+   "color": [
+    1.0,
+    0.4,
+    0.1
+   ],
+   "when": "N"
+  },
+  {
+   "name": "N_lounge_pianolamp",
+   "p": [
+    -2.712,
+    1.318,
+    0.8
+   ],
+   "color": [
+    1.0,
+    0.66,
+    0.36
+   ],
+   "when": "N"
+  }
+ ],
+ "window": {
+  "x": -3.4,
+  "y0": 1.5,
+  "y1": 2.25,
+  "z0": 1.5,
+  "z1": 0.1
+ },
+ "cats": {
+  "cat_sleep": {
+   "p": [
+    1.65,
+    1.95,
+    -1.36
+   ],
+   "rot": 0
+  },
+  "cat_sit": {
+   "p": [
+    -3.1,
+    1.25,
+    0.55
+   ],
+   "rot": -90
+  },
+  "cat_watch": {
+   "p": [
+    -2.7,
+    0.0,
+    -1.78
+   ],
+   "rot": 180
+  }
+ },
+ "eye": [
+  0.0,
+  1.26,
+  1.6
+ ],
+ "points": {
+  "smoke": [
+   0.4,
+   1.07,
+   0.52
+  ],
+  "stairs_glow": [
+   -2.7,
+   -0.8,
+   -3.2
+  ],
+  "phone": [
+   -3.28,
+   1.1,
+   -0.75
+  ],
+  "spindle": [
+   -0.69,
+   1.12,
+   0.51
+  ],
+  "valves": [
+   0.57,
+   1.1,
+   -1.3
+  ],
+  "hob": [
+   2.45,
+   0.95,
+   -3.25
+  ]
+ }
+}
