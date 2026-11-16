@@ -70,7 +70,9 @@ const DOF_FRAG = /* glsl */`
 const PREFILTER_FRAG = /* glsl */`
   uniform sampler2D tColor; uniform vec2 uTexel; uniform float uThreshold, uKnee;
   varying vec2 vUv;
-  vec3 s(vec2 o){ return texture2D(tColor, vUv + o * uTexel).rgb; }
+  // min(max(c, 0), 64): a NaN compares false both ways, so this also turns a bad pixel into a finite one
+  // before the downsample chain can spread it across the picture
+  vec3 s(vec2 o){ vec3 c = texture2D(tColor, vUv + o * uTexel).rgb; return min(max(c, vec3(0.0)), vec3(64.0)); }
   vec3 bright(vec3 c){
     // the room arrives tone-mapped (0..1): stretch the top back out so a lamp shade outshines a cream label
     float m = max(c.r, max(c.g, c.b));
@@ -120,7 +122,10 @@ const PRINT_FRAG = /* glsl */`
   }
   void main(){
     vec2 uv = vUv, q = uv - 0.5; float r2 = dot(q * vec2(uRes.x / uRes.y, 1.0), q * vec2(uRes.x / uRes.y, 1.0));
-    vec2 ca = q * uCA * r2;                                 // lateral chromatic aberration grows toward the corners
+    // lateral chromatic aberration grows toward the corners; measured against the corner (r2c = 1 there) so a wide
+    // window gets the same small fringe as a square one instead of doubled lettering at the sides
+    float r2c = dot(q, q) * 2.0;
+    vec2 ca = q * uCA * r2c;
     vec3 c = lensSample(tColor, uv, ca);
     if (uDof > 0.5){
       vec4 d = texture2D(tDof, uv);
@@ -184,7 +189,7 @@ export class Lens {
       aperture: 0.0016,    // circle of confusion (fraction of image height) per dioptre of defocus: a fast lens, stopped down a little
       maxCoc: 9,           // px at full resolution, before the image-height scaling below
       bloom: 0.16, threshold: 0.74, knee: 0.18,
-      ca: 0.0035, vig: 0.6, grain: 0.026, exposure: 1.1, lift: 0.0035,
+      ca: 0.0022, vig: 0.6, grain: 0.026, exposure: 1.1, lift: 0.0035,
       shadowTint: new THREE.Vector3(0.97, 1.0, 1.04), highTint: new THREE.Vector3(1.035, 1.0, 0.95),
     };
     this.scene = new THREE.Scene();
@@ -240,6 +245,8 @@ export class Lens {
   render(scene, camera, dt, time) {
     const r = this.r, P = this.params;
     if (!this.main) { const s = r.getSize(new THREE.Vector2()); this.setSize(s.x, s.y, r.getPixelRatio()); }
+    // a canvas a few pixels across (a hidden pane, a tab still laying out) has no room for the bloom chain: draw the bare room
+    if (!this.mips.length) { r.setRenderTarget(null); r.render(scene, camera); return; }
     const W = this.w, H = this.h, hw = this.half.width, hh = this.half.height;
     const auto = r.autoClear; r.autoClear = true;
     // 1. the room

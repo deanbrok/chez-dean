@@ -241,11 +241,15 @@ def carcass(M):
                 kit.box('div', a, b, Y0 + (0.0 if (a, b) == MID else 0.004), BACK_Y, z0, z1, M.walnut_v, only=['-y', '-x', '+x'], bevel=0.002, segs=1)
     with kit.props(td=0.35):
         kit.box('backpanel', XL + UP_T, XR - UP_T, BACK_Y, Y1, ROWS[0], TOPZ - BOARD, M.back, only=['-y'])
-    with kit.props(td=0.45):
-        # brass channel lining + slim housing lips below the board, the glowing tube up in the channel
+    with kit.props(td=0.8):
+        # brass channel lining, the glowing tube up in the channel, and a 12 mm brass fascia on the room side.
+        # The fascia hangs lower than the back wall of the channel on purpose: from the bar stool (eye 10 cm below the
+        # board, 3 m away) the back wall's inner face, lit point-blank by the tube, used to show as a sliver a millimetre
+        # tall - under half a pixel of very bright brass, which crawled and flickered as the camera breathed. Now the
+        # sight line under the fascia passes below the back wall, and what the room sees is a calm band of brass.
         kit.box('strip_ceiling', XL + UP_T, XR - UP_T, ch0, ch1, chz - 0.001, chz, M.brass, only=['-z'])
-        kit.box('strip_wall_f', XL + UP_T, XR - UP_T, ch0, ch0 + 0.0015, zb - 0.006, chz, M.brass, only=['+y', '-z', '-y'])
-        kit.box('strip_wall_b', XL + UP_T, XR - UP_T, ch1 - 0.0015, ch1, zb - 0.006, chz, M.brass, only=['-y', '-z', '+y'])
+        kit.box('strip_wall_f', XL + UP_T, XR - UP_T, ch0, ch0 + 0.0015, zb - 0.012, chz, M.brass, only=['+y', '-z', '-y'])
+        kit.box('strip_wall_b', XL + UP_T, XR - UP_T, ch1 - 0.0015, ch1, zb, chz, M.brass, only=['-y'])
     with kit.props(td=0.2):
         kit.box('strip_tube', -1.25, 1.25, 1.2935, 1.3065, chz - 0.006, chz - 0.001, M.tube, only=['-z', '-y', '+y'])
 

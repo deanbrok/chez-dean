@@ -15,13 +15,15 @@
 /scene.json
   Cache-Control: no-cache
 
-# The heavy files (model, baked textures, three.js). File names are not hashed, so keep this to a day:
-# after a re-bake, visitors pick up the new files within 24 hours.
+# The model and the baked textures belong to one bake and must change together with scene.json. Their names are not
+# hashed, so they revalidate on every visit too (a 304 when nothing changed): a day-long cache here once left visitors
+# with yesterday's model under today's textures after a re-bake.
 /bar.glb
-  Cache-Control: public, max-age=86400
+  Cache-Control: no-cache
 
 /tex/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: no-cache
 
+# three.js is vendored at a fixed version.
 /vendor/*
   Cache-Control: public, max-age=604800

@@ -26,7 +26,9 @@ const wispFrag = /* glsl */`
     return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
   float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a*n(p); p *= 2.07; a *= 0.5; } return s; }
   void main(){
-    float y = vUv.y, t = uTime;
+    // clamp: at the quad's edges a multisampled vUv.y can land a hair below 0, and pow(negative, 1.1) is NaN.
+    // One NaN pixel in the half-float buffer is enough for the lens's bloom chain to spread it into a black box.
+    float y = clamp(vUv.y, 0.0, 1.0), t = uTime;
     float sway = (sin(y*5.0 - t*0.7)*0.07 + sin(y*11.0 - t*1.3 + 1.7)*0.03) * smoothstep(0.0, 0.5, y) * uCurl
                + (fbm(vec2(y*1.4 - t*0.09, t*0.04)) - 0.5) * 0.7 * y * uCurl;
     float cx = 0.5 + sway;
