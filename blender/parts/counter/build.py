@@ -581,8 +581,21 @@ def build_paperback(M, R):
             m = Matrix(((dd.x, yax.x, nn.x, org.x), (dd.y, yax.y, nn.y, org.y), (dd.z, yax.z, nn.z, org.z), (0, 0, 0, 1)))
             with kit.xform(m):
                 kit.box('book_pages_' + side, 0.0, Lc - 0.0015, -hy + 0.0025, hy - 0.0025, -0.0098, -0.0006, M['pages'], skip='+z')
-        with kit.xform(T(0, 0, cz) @ Rx(90)):
-            kit.cyl('book_roll', 0, 0, -hy + 0.0025, hy - 0.0025, rs - 0.0012, M['pages'], segs=14)
+        # the pages bound under the spine: a narrow wedge that fills the gap between the two page blocks
+        # (it used to be a full cylinder, whose lower half hung out below the spine as a grey disc)
+        prof = [Cc + n_l * (rs - 0.0006)]
+        a_l, a_r = math.atan2(n_l.z, n_l.x), math.atan2(n_r.z, n_r.x)
+        for k in range(1, 6):
+            a = a_l + (a_r - a_l) * k / 6
+            prof.append(Cc + Vector((math.cos(a), 0, math.sin(a))) * (rs - 0.0006))
+        prof += [Cc + n_r * (rs - 0.0006), Cc + n_r * (rs - 0.0098), Cc + Vector((0, 0, 0.001)), Cc + n_l * (rs - 0.0098)]
+        bm = bmesh.new(); y0, y1 = -hy + 0.0025, hy - 0.0025
+        A = [bm.verts.new((q.x, y0, q.z)) for q in prof]; B = [bm.verts.new((q.x, y1, q.z)) for q in prof]
+        bm.faces.new(A); bm.faces.new(B[::-1])
+        for k in range(len(prof)):
+            k2 = (k + 1) % len(prof); bm.faces.new((A[k], A[k2], B[k2], B[k]))
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        kit.finish('book_roll', bm, M['pages'], smooth=False)
 
 def build_peanuts(M):
     px, py = -0.20, -0.585
