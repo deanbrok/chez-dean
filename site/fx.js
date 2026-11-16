@@ -1,4 +1,4 @@
-// Cheap atmosphere: lamp glows, smoke, steam, the sky behind the window, sunbeam dust, the cat's contact shadow.
+// Cheap atmosphere: lamp glows, smoke, steam, the night sky behind the window, the cat's contact shadow.
 import * as THREE from 'three';
 
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
@@ -37,6 +37,7 @@ const wispFrag = /* glsl */`
     float a = strand * mix(1.0, smoothstep(0.32, 0.78, br)*1.8, smoothstep(0.1, 0.55, y));
     a *= smoothstep(0.0, 0.05, y) * (1.0 - smoothstep(0.35, 0.95, y)) * smoothstep(0.0, 0.12, vUv.x) * smoothstep(1.0, 0.88, vUv.x);
     gl_FragColor = vec4(uColor, a * uAlpha);
+    #include <colorspace_fragment>
   }`;
 export function wisp(pos, w, h, color, width = 1, curl = 1) {
   const m = new THREE.ShaderMaterial({
@@ -54,7 +55,7 @@ export function wisp(pos, w, h, color, width = 1, curl = 1) {
 // A plane a little outside the wall, facing into the room. Coordinates in the shader are metres on the plane (u along the
 // wall, v up), relative to the window's lower-left corner, so everything scales with whatever window the model has.
 const skyFrag = /* glsl */`
-  uniform float uNight, uTime, uMoon2; uniform vec2 uSize, uMoon, uMoonB; uniform float uHorizon, uMoonR;
+  uniform float uTime, uMoon2; uniform vec2 uSize, uMoon, uMoonB; uniform float uHorizon, uMoonR;
   varying vec2 vP;
   float h(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
   float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -71,19 +72,12 @@ const skyFrag = /* glsl */`
   void main(){
     vec2 p = vP;                                // metres: x along the wall, y up from the window sill
     float v = p.y / uSize.y;
-    // ---- day: pale, bright, a soft wall across the street below the horizon, a pavement edge
-    vec3 skyD = mix(vec3(0.93, 0.95, 0.96), vec3(0.80, 0.88, 0.95), smoothstep(0.2, 1.4, v));
-    skyD += vec3(1.0, 0.97, 0.9) * 0.10 * exp(-length(p - vec2(uSize.x * 0.2, uSize.y * 1.3)) * 1.2);
     float hz = uHorizon;
     float wallMask = 1.0 - smoothstep(hz - 0.015, hz + 0.015, p.y);
-    vec3 wallD = vec3(0.70, 0.67, 0.62) + (n(p * vec2(3.0, 9.0)) - 0.5) * 0.03;
     // windows of the building opposite, very soft
     vec2 g = fract(vec2(p.x * 1.6, p.y * 2.2 - 0.2)); float win = smoothstep(0.25, 0.3, g.x) * (1.0 - smoothstep(0.7, 0.75, g.x)) * smoothstep(0.3, 0.36, g.y) * (1.0 - smoothstep(0.8, 0.86, g.y));
-    wallD = mix(wallD, vec3(0.55, 0.57, 0.6), win * 0.35 * smoothstep(0.0, 0.3, hz - p.y));
     float pave = 1.0 - smoothstep(0.06, 0.09, p.y);                       // pavement at the bottom of the frame
-    wallD = mix(wallD, vec3(0.58, 0.57, 0.55), pave);
-    vec3 day = mix(skyD, wallD, wallMask);
-    // ---- night: deep blue, a few stars, the moon; the wall opposite is a darker silhouette with one lit window
+    // deep blue, a few stars, the moon; the wall opposite is a dark silhouette with the odd lit window
     vec3 skyN = mix(vec3(0.035, 0.06, 0.13), vec3(0.012, 0.022, 0.06), smoothstep(0.0, 1.6, v));
     vec2 sc = p * 14.0; vec2 si = floor(sc); vec2 sf = fract(sc) - 0.5;
     float s = h(si); float star = step(0.965, s) * smoothstep(0.08, 0.0, length(sf + (vec2(h(si + 3.1), h(si + 7.7)) - 0.5) * 0.6));
@@ -96,7 +90,8 @@ const skyFrag = /* glsl */`
     wallN = mix(wallN, vec3(0.30, 0.20, 0.09), win * lit * 0.5 * smoothstep(0.0, 0.3, hz - p.y));
     wallN = mix(wallN, vec3(0.03, 0.03, 0.04), pave);
     vec3 night = mix(skyN, wallN, wallMask);
-    gl_FragColor = vec4(mix(day, night, uNight), 1.0);
+    gl_FragColor = vec4(pow(max(night, 0.0), vec3(2.2)), 1.0);     // authored as display values -> linear
+    #include <colorspace_fragment>
   }`;
 
 export function makeSky(win, stops) {
@@ -109,7 +104,7 @@ export function makeSky(win, stops) {
   const geo = new THREE.PlaneGeometry(W + margin * 2, H + margin * 2);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uNight: { value: 1 }, uTime: { value: 0 }, uMoon2: { value: 0 }, uSize: { value: new THREE.Vector2(W, H) },
+      uTime: { value: 0 }, uMoon2: { value: 0 }, uSize: { value: new THREE.Vector2(W, H) },
       uMoon: { value: new THREE.Vector2(W * 0.35, H * 0.8) }, uMoonB: { value: new THREE.Vector2(W * 0.5, H * 0.95) },
       uHorizon: { value: H * 0.3 }, uMoonR: { value: Math.min(W, H) * 0.075 },
     },
@@ -151,34 +146,44 @@ export function makeSky(win, stops) {
   return mesh;
 }
 
-// ---------------------------------------------------------------- dust in the sunbeam (day only)
-export function makeMotes(win, eye, count = 70) {
-  const zA = Math.min(win.z0, win.z1), zB = Math.max(win.z0, win.z1), yA = Math.min(win.y0, win.y1), yB = Math.max(win.y0, win.y1);
-  const c = new THREE.Vector3(win.x, (yA + yB) / 2, (zA + zB) / 2);
-  const dir = V(eye).sub(c); dir.y = 0; const L = dir.length(); dir.normalize(); dir.y = -0.65; dir.normalize();
-  const len = Math.min(2.2, L * 0.9);
-  const pos = new Float32Array(count * 3), seed = new Float32Array(count);
+// ---------------------------------------------------------------- dust hanging in the lamplight
+// a few hundred specks that drift and turn; each is only visible near one of the lights (pools: [{p, r, color}])
+export function makeDust(pools, count = 360) {
+  const pos = new Float32Array(count * 3), seed = new Float32Array(count), pool = new Float32Array(count * 4), col = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    const t = Math.random();
-    const p = c.clone().addScaledVector(dir, 0.1 + t * len);
-    p.z += (Math.random() - 0.5) * (zB - zA) * 0.8; p.y += (Math.random() - 0.5) * (yB - yA) * 0.8;
-    pos.set([p.x, p.y, p.z], i * 3); seed[i] = Math.random() * 100;
+    const k = pools[i % pools.length], c = V(k.p);
+    // uniform in a sphere of radius r around the light, a little more below it than above (light falls down and out)
+    let x, y, z; do { x = Math.random() * 2 - 1; y = Math.random() * 2 - 1; z = Math.random() * 2 - 1; } while (x * x + y * y + z * z > 1);
+    pos.set([c.x + x * k.r, c.y + y * k.r * 0.9 - k.r * 0.15, c.z + z * k.r], i * 3);
+    pool.set([c.x, c.y, c.z, k.r], i * 4); col.set(k.color, i * 3); seed[i] = Math.random() * 100;
   }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  g.setAttribute('pool', new THREE.BufferAttribute(pool, 4)); g.setAttribute('tint', new THREE.BufferAttribute(col, 3));
   const m = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 }, uAlpha: { value: 0 }, uScale: { value: 300 } },
+    uniforms: { uTime: { value: 0 }, uAlpha: { value: 1 }, uScale: { value: 720 } },
     vertexShader: /* glsl */`
-      attribute float seed; uniform float uTime, uScale; varying float vA;
+      attribute float seed; attribute vec4 pool; attribute vec3 tint; uniform float uTime, uScale; varying float vA; varying vec3 vC;
       void main(){
-        vec3 p = position + vec3(sin(uTime*0.11 + seed)*0.05, sin(uTime*0.07 + seed*1.7)*0.06 - mod(uTime*0.004 + seed, 0.1), cos(uTime*0.09 + seed*0.6)*0.05);
+        float t = uTime;
+        vec3 p = position + vec3(sin(t * 0.071 + seed) * 0.06 + sin(t * 0.23 + seed * 3.1) * 0.012,
+                                 sin(t * 0.053 + seed * 1.7) * 0.05 - mod(t * 0.0025 + seed * 0.01, 0.06),
+                                 cos(t * 0.067 + seed * 0.6) * 0.06 + cos(t * 0.19 + seed * 2.3) * 0.012);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        vA = 0.5 + 0.5 * sin(uTime * 0.5 + seed * 3.0);
-        gl_PointSize = uScale * 0.006 / -mv.z; gl_Position = projectionMatrix * mv;
+        float d = length(p - pool.xyz) / pool.w;
+        float lit = exp(-d * d * 3.2);                        // only near the light
+        float glint = pow(0.5 + 0.5 * sin(t * (0.4 + fract(seed) * 0.9) + seed * 7.0), 6.0);   // a speck turning to catch it
+        vA = lit * (0.3 + 1.4 * glint); vC = tint;
+        gl_PointSize = max(1.0, uScale * 0.0034 / -mv.z);
+        gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`
-      uniform float uAlpha; varying float vA;
-      void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, d) * vA * uAlpha; gl_FragColor = vec4(vec3(1.0, 0.95, 0.85) * a, a); }`,
+      uniform float uAlpha; varying float vA; varying vec3 vC;
+      void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.1, d) * vA * uAlpha;
+        gl_FragColor = vec4(vC * a, a);
+        #include <colorspace_fragment>
+      }`,
   });
   const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 7;
   return pts;

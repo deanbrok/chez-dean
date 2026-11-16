@@ -1,6 +1,6 @@
 // DEAN'S: a basement jazz bar, a few minutes after closing.
-// The room arrives as a baked GLB (bar.glb) + per-atlas night/day textures (tex/<atlas>_{night,day}.jpg) + scene.json.
-// This file only displays the bake (unlit, day/night mixed by one uniform), moves a camera between fixed stops,
+// The room arrives as a baked GLB (bar.glb) + one baked texture per atlas (tex/<atlas>.jpg) + scene.json.
+// This file only displays the bake (unlit), runs it through a lens (post.js), moves a camera between fixed stops,
 // animates a handful of named meshes and opens DOM panels. Nothing about the room's geometry is hard-coded here:
 // positions, stops, lamps, the window and the animation pivots are read from the assets at run time.
 import * as THREE from 'three';
@@ -10,6 +10,7 @@ import { panelFor, SLUGS, slugFor, COUNTS, esc } from './panels.js';
 import * as FX from './fx.js';
 import * as AU from './audio.js';
 import { buildGrid } from './occlude.js';
+import { Lens } from './post.js';
 
 const $ = (s) => document.querySelector(s);
 const canvas = $('#gl'), tip = $('#tip'), panel = $('#panel'), panelBody = $('#panel-body'), sheet = $('#panel .sheet');
@@ -23,7 +24,7 @@ const smooth = (x) => { x = clamp(x, 0, 1); return x * x * x * (x * (x * 6 - 15)
 const sstep = (a, b, x) => smooth((x - a) / (b - a));
 
 // ---------------------------------------------------------------- the URL hash: deep links + test switches
-// tokens separated by & , ; : "night", "day", "cat=sit", "post-first-pressing", "records", "fixedres"
+// tokens separated by & , ; : "cat=sit", "post-first-pressing", "records", "fixedres", "nolens"
 function parseHash(h) {
   const out = { flags: new Set(), kv: {}, slug: null, stop: null };
   for (const tok of decodeURIComponent((h || '').replace(/^#/, '')).split(/[&,;]/)) {
@@ -97,7 +98,11 @@ function labelFor(it) {
 // ---------------------------------------------------------------- renderer
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  // with the lens on, the room is multisampled off-screen, so the canvas itself needs no antialiasing
+  const lensLikely = !HASH.flags.has('nolens') && (() => { try { const g = document.createElement('canvas').getContext('webgl2');
+    const ok = !!g && !!(g.getExtension('EXT_color_buffer_float') || g.getExtension('EXT_color_buffer_half_float'));
+    g && g.getExtension('WEBGL_lose_context')?.loseContext(); return ok; } catch { return false; } })();
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: !lensLikely, powerPreference: 'high-performance' });
 } catch (e) {
   $('#err').textContent = 'This room needs WebGL, and your browser would rather not. The door stays locked, for now.';
   throw e;
@@ -109,11 +114,20 @@ renderer.setClearColor(0x050302, 1);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.03, 40);
 
+// ---------------------------------------------------------------- the lens (post.js): focus, bloom, grain. #nolens to see the bare bake
+const SMALL_SCREEN = TOUCH && Math.min(screen.width, screen.height) < 820;
+let lens = null;
+if (!HASH.flags.has('nolens')) {
+  try { lens = new Lens(renderer, { small: SMALL_SCREEN }); if (!lens.ok) lens = null; } catch (e) { console.warn('lens off:', e); lens = null; }
+}
+document.body.classList.toggle('lens', !!lens);
+const GLOW_K = lens ? 0.5 : 1;          // the lens blooms the lamps itself, so the painted-on glows can be quieter
+
 // ---------------------------------------------------------------- loading
 const progress = { glb: 0, tex: 0, ntex: 1 };
 function showProgress() { $('#bar').style.width = Math.round((progress.glb * 0.4 + (progress.tex / progress.ntex) * 0.6) * 100) + '%'; }
 const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-const SMALL = TOUCH && Math.min(screen.width, screen.height) < 820;
+const SMALL = SMALL_SCREEN;
 const texLoader = new THREE.TextureLoader();
 function prep(t) { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; t.needsUpdate = true; return t; }
 function loadTex(url) {
@@ -133,28 +147,14 @@ if (!META) { $('#err').textContent = 'The room could not be found (scene.json).'
 const ATLASES = META.atlases || [...new Set(Object.values(META.meshes || {}))];
 progress.ntex = ATLASES.length;
 
-// ---------------------------------------------------------------- day and night
-// uNight: 0 day, 1 night. Follows the visitor's clock (night 18:30-06:00, day 07:30-17:00, slow blends between),
-// eases over ~4 s whenever it changes. #day / #night force it; the sun/moon button overrides it for the session.
-function clockNight(d = new Date()) {
-  const m = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
-  if (m >= 17 * 60 && m < 18.5 * 60) return sstep(17 * 60, 18.5 * 60, m);
-  if (m >= 6 * 60 && m < 7.5 * 60) return 1 - sstep(6 * 60, 7.5 * 60, m);
-  return m >= 7.5 * 60 && m < 17 * 60 ? 0 : 1;
-}
-const NIGHT = { mode: HASH.flags.has('day') ? 'day' : HASH.flags.has('night') ? 'night' : 'auto', from: 0, to: 0, t: 1, dur: 4, value: 0, checked: 0 };
-const nightTarget = () => (NIGHT.mode === 'day' ? 0 : NIGHT.mode === 'night' ? 1 : clockNight());
-NIGHT.value = NIGHT.to = nightTarget();
-const G = { uNight: { value: NIGHT.value } };
-
-// ---------------------------------------------------------------- materials: two baked atlases, mixed, unlit
+// ---------------------------------------------------------------- materials: one baked atlas each, unlit
 const ATL = {};
-for (const a of ATLASES) ATL[a] = { mapN: { value: grey }, mapD: { value: grey } };
+for (const a of ATLASES) ATL[a] = { map: { value: grey } };
 const VERT = /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const FRAG = /* glsl */`
-  uniform sampler2D mapN, mapD; uniform float uNight, uHover, uGlow; varying vec2 vUv;
+  uniform sampler2D map; uniform float uHover, uGlow; varying vec2 vUv;
   void main(){
-    vec3 c = mix(texture2D(mapD, vUv).rgb, texture2D(mapN, vUv).rgb, uNight);
+    vec3 c = texture2D(map, vUv).rgb;
     c = c * (1.0 + 0.30 * uHover) + vec3(0.030, 0.022, 0.012) * uHover + vec3(0.30, 0.17, 0.06) * uGlow;
     gl_FragColor = vec4(c, 1.0);
     #include <colorspace_fragment>
@@ -162,17 +162,14 @@ const FRAG = /* glsl */`
 function roomMat(atlas) {
   const a = ATL[atlas];
   if (!a) return new THREE.MeshBasicMaterial({ color: 0x5a5046 });
-  return new THREE.ShaderMaterial({ name: atlas, uniforms: { mapN: a.mapN, mapD: a.mapD, uNight: G.uNight, uHover: { value: 0 }, uGlow: { value: 0 } },
+  return new THREE.ShaderMaterial({ name: atlas, uniforms: { map: a.map, uHover: { value: 0 }, uGlow: { value: 0 } },
     vertexShader: VERT, fragmentShader: FRAG });
 }
 const sharedMats = {};
 
-// first the textures for the mode we start in, then (after the first frame) the other half
-const firstMode = NIGHT.value >= 0.5 ? 'night' : 'day', otherMode = firstMode === 'night' ? 'day' : 'night';
-const slot = (mode) => (mode === 'night' ? 'mapN' : 'mapD');
-const firstTex = Promise.all(ATLASES.map((a) => loadTex(`./tex/${a}_${firstMode}.jpg`).then((t) => {
+const firstTex = Promise.all(ATLASES.map((a) => loadTex(`./tex/${a}.jpg`).then((t) => {
   progress.tex++; showProgress();
-  if (t) { ATL[a].mapN.value = t; ATL[a].mapD.value = t; }
+  if (t) ATL[a].map.value = t;
 })));
 let gltf;
 try {
@@ -184,11 +181,6 @@ try {
   $('#err').textContent = 'The room could not be loaded. Try again in a moment.'; throw e;
 }
 progress.glb = 1; showProgress();
-let otherLoaded = false;
-function loadOther() {
-  if (otherLoaded) return; otherLoaded = true;
-  for (const a of ATLASES) loadTex(`./tex/${a}_${otherMode}.jpg`).then((t) => { if (t) ATL[a][slot(otherMode)].value = t; });
-}
 
 // ---------------------------------------------------------------- the room
 const root = gltf.scene; scene.add(root);
@@ -335,7 +327,7 @@ setCat(HASH.kv.cat || catOfDay());
 const P = META.points || {};
 const glows = [];
 for (const g of META.glows || []) {
-  const nightOnly = g.when === 'N', p = V(g.p);
+  const nightOnly = g.when === 'N', p = V(g.p);     // N_ = a room lamp, B_ = always on (both are lit now)
   const nearValves = P.valves && p.distanceTo(V(P.valves)) < 0.2;
   const size = nearValves ? 0.24 : nightOnly ? 0.5 : 0.16;
   const s = FX.sprite(new THREE.Color(...g.color), size, nightOnly ? 0.42 : 0.5);
@@ -352,11 +344,16 @@ if (BY.radio) { radioGlow = FX.sprite(new THREE.Color(1, 0.6, 0.25), 0.18, 0); r
 const smoke = P.smoke ? FX.wisp(V(P.smoke), 0.3, 0.5, 0xeadbc4, 1, 1) : null;
 const steam = P.hob ? FX.wisp(V(P.hob), 0.4, 0.5, 0xf2efe8, 1.7, 0.55) : null;
 if (smoke) scene.add(smoke); if (steam) scene.add(steam);
-let sky = null, motes = null;
-if (META.window) {
-  sky = FX.makeSky(META.window, STOPS); scene.add(sky);
-  motes = FX.makeMotes(META.window, META.eye || STOPS.bar.p.toArray()); scene.add(motes);
+let sky = null;
+if (META.window) { sky = FX.makeSky(META.window, STOPS); scene.add(sky); }
+// dust in the light of the counter lamp, the two shelf washes and the pendants (only where a lamp would show it)
+const dustPools = [];
+for (const g of META.glows || []) {
+  if (!/counter_lamp|pend|floor_lamp|nook_bulb|pianolamp/.test(g.name)) continue;
+  dustPools.push({ p: g.p, r: /pend|nook/.test(g.name) ? 0.45 : 0.32, color: g.color.map((c) => c * 1.1) });
 }
+const dust = dustPools.length && !REDUCED ? FX.makeDust(dustPools, 90 * dustPools.length) : null;
+if (dust) scene.add(dust);
 
 // ---------------------------------------------------------------- camera state
 let stop = ORDER.find((k) => HASH.flags.has(k)) || (STOPS.bar ? 'bar' : ORDER[0]);
@@ -655,21 +652,10 @@ function updateDial() {
   if (cur) needle.style.transform = `translateX(${cur.offsetLeft + cur.offsetWidth / 2 - 1 + stations.offsetLeft}px)`;
 }
 
-// ---------------------------------------------------------------- help, the sky button, keys
+// ---------------------------------------------------------------- help, keys
 const help = $('#help'), info = $('#info');
 help.innerHTML = `<h2>${esc(C.HELP.title)}</h2><ul>${C.HELP.items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul><small>${esc(C.HELP.small)}</small>`;
 info.addEventListener('click', () => { const on = !help.classList.contains('on'); help.classList.toggle('on', on); info.setAttribute('aria-expanded', String(on)); });
-const skyBtn = $('#sky');
-skyBtn.addEventListener('click', () => {
-  NIGHT.mode = { auto: NIGHT.value >= 0.5 ? 'day' : 'night', day: 'night', night: 'auto' }[NIGHT.mode];
-  // auto -> the opposite of what you see -> the other one -> back to the clock
-  NIGHT.checked = -1; syncSky();
-});
-function syncSky() {
-  const n = NIGHT.mode === 'auto' ? nightTarget() >= 0.5 : NIGHT.mode === 'night';
-  skyBtn.classList.toggle('night', n); skyBtn.classList.toggle('auto', NIGHT.mode === 'auto');
-  skyBtn.title = 'Day and night: ' + (NIGHT.mode === 'auto' ? 'following your clock' : NIGHT.mode === 'day' ? 'day, for now' : 'night, for now');
-}
 addEventListener('keydown', (e) => {
   if (e.target && /input|textarea/i.test(e.target.tagName)) return;
   if (e.key === 'Escape') {
@@ -765,17 +751,15 @@ function poseSleeve(it, e, hn, time) {
 }
 
 // ---------------------------------------------------------------- per-frame: atmosphere
-const cNightSmoke = new THREE.Color(0xeadbc4), cDaySmoke = new THREE.Color(0xd8dde2);
 function updateAtmos(dt, time) {
-  const n = G.uNight.value;
   for (const g of glows) {
     tmpV.subVectors(camera.position, g.base).normalize();
     g.s.position.copy(g.base).addScaledVector(tmpV, 0.12);
-    let op = g.op * (g.nightOnly ? n : 1);
+    let op = g.op * GLOW_K;
     if (g.flicker) op *= 1 + 0.02 * (Math.sin(time * 13 + g.seed) * 0.6 + Math.sin(time * 31.7 + g.seed * 2) * 0.4);
     g.s.material.opacity = op; g.s.visible = op > 0.003;
   }
-  if (valve) { valve.material.opacity = (0.16 + 0.2 * n) * (1 + 0.02 * (Math.sin(time * 11.3) * 0.5 + Math.sin(time * 27.1 + 1) * 0.3 + Math.sin(time * 53.9) * 0.2)); }
+  if (valve) { valve.material.opacity = 0.36 * GLOW_K * (1 + 0.02 * (Math.sin(time * 11.3) * 0.5 + Math.sin(time * 27.1 + 1) * 0.3 + Math.sin(time * 53.9) * 0.2)); }
   if (stairsGlow) {
     const at = stop === 'stairs' && !tween ? 1 : 0.55;
     stairsGlow.userData.k = lerp(stairsGlow.userData.k ?? at, at, 1 - Math.exp(-dt * 0.5));
@@ -788,31 +772,10 @@ function updateAtmos(dt, time) {
     w.material.uniforms.uTime.value = time;
     w.rotation.y = Math.atan2(camera.position.x - w.position.x, camera.position.z - w.position.z);
   }
-  if (smoke) { smoke.material.uniforms.uAlpha.value = lerp(0.16, 0.3, n); smoke.material.uniforms.uColor.value.lerpColors(cDaySmoke, cNightSmoke, n); }
-  if (steam) steam.material.uniforms.uAlpha.value = lerp(0.2, 0.1, n);
-  if (sky) { const u = sky.material.uniforms; u.uNight.value = n; u.uTime.value = time; u.uMoon2.value = moon.a; }
-  if (motes) { motes.material.uniforms.uTime.value = time; motes.material.uniforms.uAlpha.value = (1 - n) * 0.55; motes.visible = n < 0.98; }
-}
-
-function updateNight(dt, time) {
-  if (time - NIGHT.checked > 1 || NIGHT.checked < 0) {
-    NIGHT.checked = time;
-    const tg = nightTarget();
-    if (Math.abs(tg - NIGHT.to) > 1e-3) { NIGHT.from = NIGHT.value; NIGHT.to = tg; NIGHT.t = 0; }
-    syncSky();
-  }
-  if (NIGHT.t < 1) { NIGHT.t = Math.min(1, NIGHT.t + dt / NIGHT.dur); NIGHT.value = lerp(NIGHT.from, NIGHT.to, smooth(NIGHT.t)); }
-  G.uNight.value = NIGHT.value;
-  if (Math.abs(NIGHT.value - 0.5) > 0.02 || !document.body.dataset.sky) {
-    const isNight = NIGHT.value >= 0.5, k = isNight ? 'night' : 'day';
-    if (document.body.dataset.sky !== k) {
-      document.body.dataset.sky = k;
-      document.body.classList.toggle('is-night', isNight); document.body.classList.toggle('is-day', !isNight);
-      const sub = $('#subtitle'); sub.classList.add('swap');
-      setTimeout(() => { sub.textContent = C.SUBTITLE[k]; sub.classList.remove('swap'); }, document.body.dataset.ready ? 1200 : 0);
-    }
-  }
-  if (Math.abs(NIGHT.value - 0.5) < 0.49 && !otherLoaded) loadOther();
+  if (smoke) smoke.material.uniforms.uAlpha.value = 0.2;
+  if (steam) steam.material.uniforms.uAlpha.value = 0.08;
+  if (sky) { const u = sky.material.uniforms; u.uTime.value = time; u.uMoon2.value = moon.a; }
+  if (dust) { dust.material.uniforms.uTime.value = time; dust.material.uniforms.uScale.value = innerHeight * renderer.getPixelRatio(); }
 }
 
 let wallT = 0;
@@ -823,21 +786,39 @@ function updateStrange(dt, rdt) {
   if (ring.on) { ring.t += dt; if (ring.t > 3.2) ring.on = false; }
   // the second moon: stay at the window, at night, for a while
   if (!moon.on) {
-    if (stop === 'window' && !tween && G.uNight.value > 0.6 && !open) moon.dwell += rdt; else moon.dwell = 0;
+    if (stop === 'window' && !tween && !open) moon.dwell += rdt; else moon.dwell = 0;
     if (moon.dwell > moon.need) { moon.on = true; if (SS) SS.setItem('moon2', '1'); }
   }
   if (moon.on && moon.a < 1) moon.a = Math.min(1, moon.a + dt / 7);
 }
 
 // ---------------------------------------------------------------- frame loop, adaptive resolution
-function resize() { renderer.setSize(innerWidth, innerHeight, false); updateDial(); }
+function resize() { renderer.setSize(innerWidth, innerHeight, false); if (lens) lens.setSize(innerWidth, innerHeight, renderer.getPixelRatio()); updateDial(); }
 addEventListener('resize', resize); resize();
 function adapt(dt) {
   if (perf.locked || frames < 40 || document.hidden) return;
   perf.acc += dt; perf.n++;
   if (perf.acc < 2) return;
   const avg = perf.acc / perf.n; perf.acc = 0; perf.n = 0;
-  if (avg > 1 / 32 && perf.ratio > 0.75) { perf.ratio = Math.max(0.75, +(perf.ratio * 0.8).toFixed(2)); renderer.setPixelRatio(perf.ratio); resize(); }
+  if (avg > 1 / 32) {
+    // too slow: first the lens gives up its expensive parts, then the resolution comes down
+    if (lens && lens.q > 1) { lens.setQuality(1); resize(); }
+    else if (perf.ratio > 0.75) { perf.ratio = Math.max(0.75, +(perf.ratio * 0.8).toFixed(2)); renderer.setPixelRatio(perf.ratio); resize(); }
+    else if (lens && lens.q > 0) { lens.setQuality(0); resize(); }
+  }
+}
+
+// ---------------------------------------------------------------- where the lens focuses
+// each stop meters a point on screen (what you would look at from there); with something picked up, it racks to that thing
+const FOCUS_AT = { bar: [0.5, 0.5], records: [0.5, 0.52], hifi: [0.5, 0.5], table: [0.5, 0.5], window: [0.42, 0.5], stairs: [0.5, 0.62] };
+const fwd = new THREE.Vector3();
+function updateFocus() {
+  if (open && open.item) {
+    const it = open.item; it.obj.updateMatrixWorld();
+    const c = it.lbox.getCenter(tmpV).applyMatrix4(it.obj.matrixWorld);
+    camera.getWorldDirection(fwd);
+    lens.focusAt(Math.max(0.2, c.sub(camera.position).dot(fwd)));
+  } else lens.focusOn(FOCUS_AT[stop] || [0.5, 0.5]);
 }
 
 let frames = 0, last = performance.now();
@@ -847,19 +828,19 @@ function frame(now) {
   clockT += dt;
   const time = clockT;
   if (pendingMove && now - lastPick > 90) { lastPick = now; const [x, y] = pendingMove; pendingMove = null; hoverAt(x, y); }
-  updateNight(dt, time); updateCamera(dt, time); updateItems(dt, time); updateAtmos(dt, time); updateStrange(dt, Math.min(rdt, 0.5));
-  renderer.render(scene, camera);
+  updateCamera(dt, time); updateItems(dt, time); updateAtmos(dt, time); updateStrange(dt, Math.min(rdt, 0.5));
+  if (lens) { updateFocus(dt); lens.render(scene, camera, dt, time); } else renderer.render(scene, camera);
   updateMarks(time); adapt(rdt);
   frames++;
   if (frames === 2) {
-    $('#loading').classList.add('done'); document.body.dataset.ready = '1'; setTimeout(loadOther, 400);
+    $('#loading').classList.add('done'); document.body.dataset.ready = '1';
     const mk = () => { grid = buildGrid(staticMeshes); refreshMarks(); };
     if ('requestIdleCallback' in window) requestIdleCallback(mk, { timeout: 1500 }); else setTimeout(mk, 300);
   }
 }
 
 // ---------------------------------------------------------------- start
-goto(stop, true); updateDial(); syncSky(); syncSound();
+goto(stop, true); updateDial(); syncSound();
 if (HASH.slug) { const [g, i] = SLUGS[HASH.slug]; openPanel(g, i, { instant: true }); }
 renderer.setAnimationLoop(frame);
 document.fonts && document.fonts.ready.then(updateDial);
@@ -868,7 +849,6 @@ document.fonts && document.fonts.ready.then(updateDial);
 function settle() {
   if (tween) { cam.p.copy(tween.to.p); cam.q.copy(tween.to.q); cam.fov = tween.to.fov; tween = null; arrive(); }
   for (const it of ITEMS) it.t = it.target;
-  NIGHT.t = 1; NIGHT.value = NIGHT.to; G.uNight.value = NIGHT.value;
   drift.k = open && open.group === 'door' ? 1 : 0;
   mouse.sx = mouse.x; mouse.sy = mouse.y; pullS = -1;
   if (open && open.item && open.item.motion !== 'sleeve') { const l = lookToward(open.item.lookAt || open.item.center, camera.fov, innerWidth / innerHeight); look.x = l.x; look.y = l.y; } else { look.x = look.y = 0; }
@@ -885,11 +865,6 @@ window.__poc = {
     else if (COUNTS[name] !== undefined) openPanel(name, i || 0);
   },
   close: closePanel,
-  night: (v) => {
-    if (v === 'auto') NIGHT.mode = 'auto';
-    else { NIGHT.mode = v >= 0.5 ? 'night' : 'day'; NIGHT.from = NIGHT.value; NIGHT.to = +v; NIGHT.t = 0; }
-    NIGHT.checked = v === 'auto' ? -1 : clockT; syncSky();
-  },
   cat: (name) => setCat(name),
   settle,
   ring: (holdMs) => startRing(holdMs),      // holdMs: keep the line up longer (slow software-GL screenshots)
@@ -899,10 +874,10 @@ window.__poc = {
   hover: (name) => { const it = BY[name]; if (!it) return; pv.copy(it.center).project(camera); hoverAt(((pv.x + 1) / 2) * innerWidth, ((1 - pv.y) / 2) * innerHeight); },
   click: (x, y) => act(open ? null : pick(x, y)),
   info: () => ({
-    stop, tween: !!tween, open: open && { group: open.group, index: open.index, slug: open.slug }, night: +G.uNight.value.toFixed(3), mode: NIGHT.mode,
-    clockNight: +clockNight().toFixed(3), cat: catPose, frames, ratio: perf.ratio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
+    stop, tween: !!tween, open: open && { group: open.group, index: open.index, slug: open.slug },
+    lens: lens ? lens.info() : null, cat: catPose, frames, ratio: perf.ratio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
     sound: AU.state(), rang, ringing: ring.on, ringAt: ring.at, moon2: moon.on, moonDwell: +moon.dwell.toFixed(1), missing: MISSING,
     homes: Object.fromEntries(ITEMS.map((x) => [x.name, x.stop])), regions: REGIONS.map((r) => r.stop),
   }),
-  dbg: { scene, camera, renderer, ITEMS, STOPS, G, staticMeshes, grid: () => grid, THREE },
+  dbg: { scene, camera, renderer, ITEMS, STOPS, staticMeshes, grid: () => grid, THREE, lens: () => lens },
 };

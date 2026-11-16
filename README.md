@@ -1,14 +1,13 @@
 # Dean's
 
 A personal website that is one room: a small basement jazz bar in late-1970s Tokyo, a few minutes
-after closing. Coffee shop by day, records and whisky by night (it follows the visitor's clock).
-Records are posts, the manuscript is writing in progress, the regulars' bottles are projects, and
-the half-open door leads downstairs.
+after closing. It is always night down here. Records are posts, the manuscript is writing in
+progress, the regulars' bottles are projects, and the half-open door leads downstairs.
 
-| Night, from the bar stool | Day |
+| From the bar stool | The stairs |
 |---|---|
-| ![Night](docs/night.jpg) | ![Day](docs/day.jpg) |
-| ![The stairs](docs/stairs.jpg) | ![A record pulled out](docs/record.jpg) |
+| ![From the bar stool](docs/night.jpg) | ![The stairs](docs/stairs.jpg) |
+| ![A record pulled out](docs/record.jpg) | ![The turntable](docs/hifi.jpg) |
 
 **Status:** a working first version. All text in the site is placeholder sample content, and the
 page is marked `noindex` until that is replaced (see "Before you go live").
@@ -18,10 +17,11 @@ page is marked `noindex` until that is replaced (see "Before you go live").
 ```
 site/              the website. Plain static files, no build step. This folder is what gets deployed.
   index.html, style.css, main.js, panels.js, fx.js, audio.js, occlude.js
+  post.js          the lens: autofocus + depth of field, bloom, film grain, vignette (see below)
   content.js       every word shown in the panels (edit this)
   bar.glb          the room (about 144k triangles)
   scene.json       camera stops, lamp positions and other data exported with the model
-  tex/             baked lighting: one night and one day texture per part
+  tex/             baked lighting: one texture per part (2048 px, path-traced and denoised)
   vendor/three/    three.js r187 (MIT), vendored so nothing loads from a CDN
   _headers         cache rules read by Cloudflare
   404.html
@@ -43,8 +43,19 @@ python3 -m http.server 8080 --directory site
 
 It must be served over http (not opened as a file), because the page loads modules and textures.
 
-Useful while testing: `#night` or `#day` in the URL forces the lighting, `#cat=sleep|sit|watch`
+Useful while testing: `#nolens` shows the bare bake without the lens, `#cat=sleep|sit|watch`
 picks where the cat is, and `#post-first-pressing` style links open a panel directly.
+
+### The lens
+
+The room is unlit in the browser (all light is baked), so what makes it read as a photograph is
+`site/post.js`. The room is drawn into a multisampled half-float buffer, then: an autofocus that
+meters a point per camera stop and racks focus to whatever you pick up; depth of field from real
+distances at half resolution; bloom from a mip chain with a warm halation tint; a little lateral
+chromatic aberration, an optical vignette, a gentle film shoulder and split tone; and animated grain
+with dither. All of its numbers live in `Lens.params`. On slow devices it steps down by itself (no
+MSAA and fewer taps, then lower resolution, then no depth of field). Browsers without half-float
+render targets get the plain bake.
 
 ## Deploy on Cloudflare with your own domain
 
@@ -93,8 +104,7 @@ defaults to it.
 - **Check it on your own devices.** It has only been tested in a headless browser with software
   rendering: frame rate on a real GPU, the sound (off by default) and touch input are unverified.
 - **Known weak spots:** portrait phones show the room in a narrow band; the first load is about
-  10 MB (model 3.8 MB, night or day textures about 4 MB, three.js 1.3 MB); baked lighting is soft
-  up close because it was baked at low sample counts on a CPU.
+  10 MB (model 3.8 MB, textures about 5 MB, three.js 1.3 MB).
 
 ## Rebuilding the 3D room
 
@@ -109,12 +119,15 @@ font paths at the top of each `blender/parts/*/tex.py` or run this step in a Lin
 ```bash
 blender/make_textures.sh        # paint labels, posters, covers (once, and after editing any tex.py)
 blender/bake_all.sh --test      # quick low-resolution run, about 2 minutes: checks everything works
-blender/bake_all.sh             # full bake: 9 atlases x (night + day), about 25 min on 2 CPU cores
+blender/bake_all.sh             # full bake: 9 atlases at 2048 px, 64 samples + denoise (slow on 2 CPU cores; see below)
 ```
 
-`bake_all.sh` overwrites `site/bar.glb`, `site/scene.json` and `site/tex/*.jpg`. The full bake
-writes high-quality JPEGs (about 13 MB in total); the ones committed here were recompressed to
-about 8 MB.
+`bake_all.sh` overwrites `site/bar.glb`, `site/scene.json` and `site/tex/*.jpg`. Every atlas is
+path-traced at full resolution (light, albedo and normals at 2048 px) and then cleaned with
+OpenImageDenoise (run through Blender's compositor, guided by the albedo and normals).
+`BAR_SPP=128 blender/bake_all.sh` or `BAR_RES=4096` trade time for an even cleaner result. The
+textures committed here were baked at 32 to 64 samples on two CPU cores (about an hour and a half)
+and saved as JPEG quality 84.
 
 Working on one part:
 
@@ -127,9 +140,9 @@ Where things live:
 
 - `blender/barkit/layout.py` is the single source of truth for every measurement, camera stop and
   light. Change the lighting or a camera there, then re-bake.
-- For better quality, raise the sample count and resolution in `barkit/pipeline.py` (`bake()`:
-  `lo, hi, spp`) and bake on a machine with more cores. Cycles runs on CPU here; switching
-  `cycles_setup()` to a GPU device makes high sample counts practical.
+- For better quality, raise `BAR_SPP` / `BAR_RES` (read in `barkit/pipeline.py`) and bake on a
+  machine with more cores. Cycles runs on CPU here; switching `cycles_setup()` to a GPU device makes
+  high sample counts practical.
 - Adding a post means adding a sleeve in `blender/parts/shelves/` (cover art in its `tex.py`),
   re-baking the `shelves` and `shelves_b` atlases, and adding the text in `site/content.js`.
 
