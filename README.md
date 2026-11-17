@@ -71,6 +71,31 @@ own with the ashtray (`counter_b`, 1024 px), so a change to the cigar is a four-
 `cigar_head`) that the page poses it from. The timings are `CG_T` in `site/main.js`; the smoke is
 `makePuff()` in `site/fx.js`.
 
+### Cigar notes (the humidor)
+
+The cigar box on the counter opens the humidor: a list of cigars, each with its own page of notes
+(`#humidor`, and `#cigar-<slug>` for one cigar), with the old odds and ends underneath. To add a
+review, add an entry to `CIGARS` in `site/content.js`; nothing needs baking.
+
+```js
+{ slug: 'hemingway-signature', maker: 'Arturo Fuente', line: 'Hemingway', name: 'Signature',
+  shape: 'Perfecto', size: '6 × 47', wrapper: 'Cameroon', binder: 'Dominican', filler: 'Dominican',
+  origin: 'Dominican Republic', strength: 'Medium',
+  smoked: 'November 2026', where: 'At the counter', paired: 'A whisky, no ice', time: 'About an hour',
+  score: 4.5, marks: [['Draw', 4], ['Burn', 5], ['Flavour', 4.5], ['Finish', 4]],
+  thirds: [['The foot', '...'], ['The middle', '...'], ['The last third', '...']],
+  verdict: '...',
+  photo: 'img/signature.jpg',   // optional: a picture of your own, put in site/
+  lit: true }                   // the one in the ashtray; the cigar you can pick up takes its name from this entry
+```
+
+Only `slug`, `maker` and `name` are required; a field you leave out is simply not shown, and an entry
+without a `score` is listed as "no notes yet". The two entries there now are placeholders
+(`sample: true` shows the stamp): the facts about the cigars are real, the notes are not written yet.
+
+The cigar in the ashtray is named in the page after the `lit` entry, so its tooltip reads "Arturo
+Fuente Hemingway Signature, still lit". The 3D model keeps the house band and the house box label.
+
 ### The lens
 
 The room is unlit in the browser (all light is baked), so what makes it read as a photograph is

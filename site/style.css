@@ -245,7 +245,7 @@ body.panel-open #tools { opacity: .0; pointer-events: none; }
 .k-match .striker { height: 26px; background: repeating-linear-gradient(90deg, #3d2a1c 0 2px, #563b28 2px 3px, #3a281a 3px 5px), #4a3322;
   border-top: 2px solid #2a1c12; box-shadow: inset 0 2px 4px rgba(0,0,0,.5); }
 
-/* --- cigar box label (odds and ends) */
+/* --- cigar box label (the humidor: cigar notes, then odds and ends) */
 .k-cigar .paper { background: #f1e4c4; border: 2px solid #8a6a33; outline: 1px solid #8a6a33; outline-offset: -8px; padding: 0 0 26px; }
 .k-cigar .band { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 14px; padding: 12px 14px; color: #f3dc9e;
   background: linear-gradient(180deg, #8f2a1a, #6e1f13); border: 1px solid #d4b15f; box-shadow: inset 0 0 0 3px #6e1f13, inset 0 0 0 4px #d4b15f; }
@@ -260,6 +260,41 @@ body.panel-open #tools { opacity: .0; pointer-events: none; }
 .k-cigar li code { text-transform: none; letter-spacing: 0; font-family: var(--type); font-size: 13px; color: var(--ink-soft); }
 .k-cigar li a { color: var(--oxblood); text-decoration: none; border-bottom: 1px solid currentColor; }
 .k-cigar .fine { margin: 16px 28px 0; }
+.k-cigar .also { margin: 26px 28px 0; padding-top: 14px; border-top: 3px double rgba(138,106,51,.7); font-family: var(--label); font-weight: 500; font-size: 10.5px; letter-spacing: .26em; text-transform: uppercase; color: var(--oxblood); }
+.k-cigar .smokes { list-style: none; margin: 10px 28px 0; padding: 0; }
+.k-cigar .smokes li { display: block; padding: 0; border-bottom: 1px dotted rgba(28,20,14,.4); }
+.k-cigar .smokes button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 1fr auto; gap: 1px 12px; width: 100%; padding: 11px 6px 11px 0; cursor: pointer; }
+.k-cigar .smokes button:hover b, .k-cigar .smokes button:focus-visible b { color: var(--oxblood); text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.k-cigar .smokes b { font-family: var(--display); font-weight: 700; font-size: 20px; line-height: 1.15; }
+.k-cigar .smokes span { grid-column: 1; font-size: 16px; font-style: italic; color: var(--ink-soft); }
+.k-cigar .smokes em { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; font-style: normal; }
+.k-cigar .lit, .k-cigar .tbd { font-family: var(--label); font-style: normal; font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; }
+.k-cigar .lit { color: var(--ember); } .k-cigar .lit::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--ember); vertical-align: 1px; }
+.k-cigar .tbd { color: var(--ink-soft); }
+.dots { display: inline-flex; gap: 4px; vertical-align: middle; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #6e1f13; }
+.dots i.f { background: #6e1f13; } .dots i.h { background: linear-gradient(90deg, #6e1f13 50%, transparent 50%); }
+/* one cigar's notes */
+.k-smoke .paper h2 { margin: 16px 28px 2px; }
+.k-smoke .paper > p, .k-smoke section { margin-left: 28px; margin-right: 28px; }
+.k-smoke .shot { display: block; width: calc(100% - 28px); margin: 0 14px; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid #8a6a33; }
+.k-smoke .score { display: flex; align-items: center; gap: 10px; margin: 10px 28px 0; }
+.k-smoke .score .dots i { width: 13px; height: 13px; }
+.k-smoke .score b { font-family: var(--display); font-weight: 900; font-size: 24px; } .k-smoke .score span { font-family: var(--label); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--ink-soft); }
+.k-smoke .spec { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; margin: 16px 28px 0; padding: 10px 0; border-top: 1px solid rgba(138,106,51,.8); border-bottom: 1px solid rgba(138,106,51,.8); }
+.k-smoke .spec div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 4px 0; border-bottom: 1px dotted rgba(28,20,14,.28); }
+.k-smoke .spec dt { font-family: var(--label); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--oxblood); white-space: nowrap; }
+.k-smoke .spec dd { margin: 0; font-size: 16.5px; text-align: right; }
+.k-smoke .paper .sat { margin-top: 12px; font-size: 15.5px; font-style: italic; color: var(--ink-soft); }
+.k-smoke .sat span { font-family: var(--label); font-style: normal; font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--oxblood); }
+.k-smoke section h3 { margin: 18px 0 4px; font-family: var(--display); font-style: italic; font-weight: 700; font-size: 21px; }
+.k-smoke .marks { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; margin: 16px 28px 0; padding: 0; }
+.k-smoke .marks li { display: flex; grid-template-columns: none; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dotted rgba(28,20,14,.4); }
+.k-smoke .marks li span { font-family: var(--label); font-style: normal; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--oxblood); }
+.k-smoke .paper .verdict { margin-top: 18px; padding: 12px 0 0; border-top: 3px double rgba(138,106,51,.7); font-family: var(--display); font-style: italic; font-size: 20px; line-height: 1.38; }
+.k-smoke .back { all: unset; cursor: pointer; color: var(--oxblood); margin-right: 10px; } .k-smoke .back:hover, .k-smoke .back:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.k-smoke .leaf { margin-left: 28px; margin-right: 28px; }
+@media (max-width: 520px) { .k-smoke .spec, .k-smoke .marks { grid-template-columns: 1fr; } }
 
 /* --- paperback (currently reading) */
 .k-paperback .paper { background: #e8d6a8; background-image: linear-gradient(180deg, #ecdcb2, #dfc893); padding-top: 26px; }

@@ -44,4 +44,14 @@ for name in sys.argv[3:]:
     if not ok: print('%-16s geometry differs, left alone (bake its atlas again)' % name); continue
     for so, lo, sn in jobs: bn[on + sn:on + sn + lo] = bo[oo + so:oo + so + lo]
     changed += 1; print('%-16s old UVs and triangle order kept' % name)
-if changed: open(new, 'wb').write(bn)
+if changed:
+    open(new, 'wb').write(bn)
+    # the model's bytes changed, so the bake's version stamp in scene.json must too (same hash as barkit.pipeline.stamp())
+    import os, glob, hashlib
+    site = os.path.dirname(os.path.abspath(new)); f = os.path.join(site, 'scene.json')
+    if os.path.exists(f):
+        h = hashlib.sha1()
+        for p in [os.path.join(site, 'bar.glb')] + sorted(glob.glob(os.path.join(site, 'tex', '*.jpg'))):
+            if os.path.exists(p): h.update(os.path.basename(p).encode()); h.update(open(p, 'rb').read())
+        meta = json.load(open(f)); meta['v'] = h.hexdigest()[:10]; json.dump(meta, open(f, 'w'), indent=1)
+        print('STAMP', meta['v'])
