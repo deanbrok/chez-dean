@@ -170,9 +170,33 @@ export const COLOPHON = {
   small: 'Strike gently. Sample content.',
 };
 
-// ---------------------------------------------------------------- the cigar box: odds and ends
+// ---------------------------------------------------------------- the cigar box: the humidor (cigar notes), and under them the odds and ends
+// One entry per cigar. To add a review, copy an entry, change the slug, and write. Everything except `slug`, `maker` and `name`
+// is optional: leave a field out and its line is not shown. Newest first is the convention; the order here is the order shown.
+//   lit: true      marks the one that is in the ashtray (the cigar you can pick up is named after it). Give it to one entry only.
+//   score          out of 5 (halves are fine); marks = the same for single qualities, shown as small dots
+//   thirds         the smoke as it went: [heading, text] pairs. Any headings, any number of them.
+//   photo          optional: a picture of your own in site/ (e.g. 'img/signature.jpg'), shown at the top of the notes
+//   sample: true   shows the "sample" stamp; remove it once the words are yours
+export const HUMIDOR = { title: 'The Humidor', intro: 'What has been smoked at this counter, and what was thought of it. Kept in the box, under the cedar sheet.' };
+export const CIGARS = [
+  { slug: 'hemingway-signature', maker: 'Arturo Fuente', line: 'Hemingway', name: 'Signature', lit: true, sample: true,
+    shape: 'Perfecto', size: '6 × 47', wrapper: 'Cameroon', binder: 'Dominican', filler: 'Dominican', origin: 'Dominican Republic', strength: 'Medium',
+    smoked: 'November 2026', where: 'At the counter, after closing', paired: 'A whisky, no ice', time: 'About an hour',
+    score: 4.5, marks: [['Draw', 4], ['Burn', 5], ['Flavour', 4.5], ['Finish', 4]],
+    thirds: [
+      ['The foot', 'Placeholder. The narrow foot takes the flame quickly and the first minutes are their own small cigar. Write what you found here.'],
+      ['The middle', 'Placeholder. Where it opens up to the full ring. What changed, what stayed.'],
+      ['The last third', 'Placeholder. How far down it was worth taking, and how it ended.'],
+    ],
+    verdict: 'Placeholder verdict: one or two sentences you would say to someone deciding whether to buy a box.' },
+  { slug: 'hemingway-short-story', maker: 'Arturo Fuente', line: 'Hemingway', name: 'Short Story', sample: true,
+    shape: 'Perfecto', size: '4 × 49', wrapper: 'Cameroon', origin: 'Dominican Republic',
+    smoked: 'Not yet', where: 'Next in the box',
+    verdict: 'Placeholder. The small one from the same line; no notes until it has been smoked.' },
+];
+
 export const ODDS = {
-  intro: 'Things that did not fit anywhere else, kept in the box they came in.',
   items: [
     ['Elsewhere', 'code, notes, the odd photograph', 'example.org/dean'],
     ['Feed', 'new records on the shelf, by post', 'example.org/feed.xml'],
@@ -246,7 +270,7 @@ export const HELP = {
   items: [
     'Move the mouse to look around a little; on a phone the room sways by itself.',
     'Click a part of the room to go there, or use the dial at the bottom, the arrow keys, 1–6, or a swipe.',
-    'Small brass rings mark what opens. Records are posts, books are reading lists, bottles are projects.',
+    'Small brass rings mark what opens. Records are posts, books are reading lists, bottles are projects, the cigar box keeps cigar notes.',
     '♪ or the record on the turntable for sound.',
     'The cigar in the ashtray is still lit. Nobody is counting.',
     'Esc closes a page, then takes you back to your stool.',

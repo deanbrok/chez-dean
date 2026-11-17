@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as C from './content.js';
-import { panelFor, SLUGS, slugFor, COUNTS, esc } from './panels.js';
+import { panelFor, SLUGS, slugFor, COUNTS, esc, cigarName } from './panels.js';
 import * as FX from './fx.js';
 import * as AU from './audio.js';
 import { buildGrid } from './occlude.js';
@@ -84,9 +84,9 @@ function labelFor(it) {
     case 'radio': return ['The radio', AU.state().radio ? 'Turn it off' : 'Rain, and a train somewhere'];
     case 'note': return ['A note on the counter', 'About'];
     case 'matchbook': return ['A matchbook', 'How this place was made'];
-    case 'cigarbox': return ['The cigar box', 'Odds & ends'];
+    case 'cigarbox': return ['The cigar box', 'The humidor · cigar notes'];
     case 'paperback': return ['Face down, left open', 'Currently reading'];
-    case 'cigar': return ['In the ashtray, still lit', 'Take a puff'];
+    case 'cigar': { const c = C.CIGARS.find((x) => x.lit); return [c ? cigarName(c) + ', still lit' : 'In the ashtray, still lit', 'Take a puff']; }
     case 'phone': return ['The telephone', 'Contact'];
     case 'mapframe': return ['An old map', 'Places'];
     case 'piano_keys': return ['The piano', AU.soundOn() ? 'One chord' : 'One chord (sound is off)'];
@@ -453,7 +453,7 @@ let rang = !!(SS && SS.getItem('rang'));
 function openPanel(group, index, opts = {}) {
   const p = panelFor(group, index, { rang });
   if (!p) return;
-  const it = itemFor(group, index);
+  const it = itemFor(group, index) || (group === 'smoke' ? BY.cigarbox : undefined);      // a cigar's notes come out of the box: its lid stays up
   if (it && it.stop !== stop) goto(it.stop, !!opts.instant);
   if (open && open.item && open.item !== it) open.item.target = 0;
   panel.className = 'on ' + p.cls + (opts.instant ? ' instant' : '');
@@ -479,7 +479,7 @@ function closePanel() {
 $('#close').addEventListener('click', closePanel);
 panel.addEventListener('click', (e) => {
   const go = e.target.closest('[data-go]');
-  if (go) { const [g, i] = go.dataset.go.split(':'); openPanel(g, +i); return; }
+  if (go) { const [g, i] = go.dataset.go.split(':'); openPanel(g, i === '' || i === undefined ? undefined : +i); return; }
   if (e.target === sheet || e.target === panel) closePanel();     // the dark margin around the paper counts as outside
 });
 addEventListener('hashchange', () => {

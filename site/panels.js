@@ -1,5 +1,5 @@
 // HTML for the reading panels. One family (paper, ink, brass, small caps), a different object for each kind.
-import { POSTS, NOW, SHELVES, BOTTLES, WRITING, ABOUT, COLOPHON, ODDS, PAPERBACK, CONTACT, PLACES, DOWNSTAIRS } from './content.js';
+import { POSTS, NOW, SHELVES, BOTTLES, WRITING, ABOUT, COLOPHON, ODDS, HUMIDOR, CIGARS, PAPERBACK, CONTACT, PLACES, DOWNSTAIRS } from './content.js';
 
 export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const sample = (t = 'sample') => `<span class="sample">${esc(t)}</span>`;
@@ -11,7 +11,8 @@ export const SLUGS = {};
 POSTS.forEach((p, i) => { SLUGS['post-' + p.slug] = ['rec', i]; });
 SHELVES.forEach((s, i) => { SLUGS['reading-' + s.slug] = ['book', i]; });
 BOTTLES.forEach((b, i) => { SLUGS['bottle-' + b.slug] = ['bottle', i]; });
-Object.assign(SLUGS, { now: ['nowplaying'], writing: ['manuscript'], about: ['note'], colophon: ['matchbook'], odds: ['cigarbox'],
+CIGARS.forEach((c, i) => { SLUGS['cigar-' + c.slug] = ['smoke', i]; });
+Object.assign(SLUGS, { now: ['nowplaying'], writing: ['manuscript'], about: ['note'], colophon: ['matchbook'], humidor: ['cigarbox'], odds: ['cigarbox'],
   'currently-reading': ['paperback'], contact: ['phone'], places: ['mapframe'], downstairs: ['door'] });
 export function slugFor(group, i) {
   for (const [k, v] of Object.entries(SLUGS)) if (v[0] === group && (v[1] === undefined || v[1] === i)) return k;
@@ -115,14 +116,46 @@ function colophon() {
     </article>` };
 }
 
-function odds() {
-  return { cls: 'k-cigar', label: 'Odds and ends', html: `
+// ---- the cigar box: the humidor (a list of cigars, each with its own page of notes) and, under them, the odds and ends
+export const cigarName = (c) => [c.maker, c.line, c.name].filter(Boolean).join(' ');
+const dots = (v, n = 5) => {          // a score as five small rounds: full, half, empty
+  let h = ''; for (let k = 1; k <= n; k++) h += `<i class="${v >= k ? 'f' : v >= k - 0.5 ? 'h' : ''}"></i>`;
+  return `<span class="dots" role="img" aria-label="${esc(v)} out of ${n}">${h}</span>`;
+};
+function humidor() {
+  return { cls: 'k-cigar', label: 'The humidor', html: `
     <article class="paper">
-      <div class="band"><span>Hecho a mano</span><b>Odds &amp; Ends</b><span>Caja No. 7</span></div>
-      <p class="sub">${esc(ODDS.intro)}</p>
+      <div class="band"><span>Hecho a mano</span><b>${esc(HUMIDOR.title)}</b><span>Caja No. 7</span></div>
+      <p class="sub">${esc(HUMIDOR.intro)}</p>
+      <ol class="smokes">${CIGARS.map((c, i) => `<li><button data-go="smoke:${i}">
+        <b>${esc(cigarName(c))}</b>
+        <span>${esc([c.shape, c.size, c.wrapper].filter(Boolean).join(' · '))}</span>
+        <em>${c.lit ? '<i class="lit">in the ashtray now</i>' : ''}${c.score != null ? dots(c.score) : '<i class="tbd">no notes yet</i>'}</em>
+      </button></li>`).join('')}</ol>
+      <h3 class="also">Also in the box</h3>
       <ul>${ODDS.items.map((x) => `<li><b>${esc(x[0])}</b><span>${esc(x[1])}</span>${x[2] ? (x[2][0] === '#'
         ? `<a href="${esc(x[2])}">open</a>` : `<code>${esc(x[2])}</code>`) : ''}</li>`).join('')}</ul>
       <p class="fine">Addresses are placeholders. ${sample()}</p>
+    </article>` };
+}
+function smoke(i) {
+  const n = CIGARS.length, c = CIGARS[((i % n) + n) % n];
+  const spec = [['Shape', c.shape], ['Size', c.size], ['Wrapper', c.wrapper], ['Binder', c.binder], ['Filler', c.filler], ['Made in', c.origin], ['Strength', c.strength]].filter((x) => x[1]);
+  const sat = [['Smoked', c.smoked], ['Where', c.where], ['With', c.paired], ['It lasted', c.time]].filter((x) => x[1]);
+  return { cls: 'k-cigar k-smoke', label: 'Cigar notes: ' + cigarName(c), html: `
+    <article class="paper">
+      <div class="band"><span>${esc(c.maker)}</span><b>${esc(c.line || 'Cigar notes')}</b><span>No. ${String(i + 1).padStart(2, '0')}</span></div>
+      ${c.photo ? `<img class="shot" src="${esc(c.photo)}" alt="${esc(cigarName(c))}" loading="lazy">` : ''}
+      <h2>${esc(c.name)}</h2>
+      <p class="sub">${esc([c.maker, c.line].filter(Boolean).join(' '))}${c.lit ? ' &nbsp;<i class="lit">in the ashtray now</i>' : ''}</p>
+      ${c.score != null ? `<div class="score">${dots(c.score)}<b>${esc(c.score)}</b><span>out of 5</span></div>` : ''}
+      ${spec.length ? `<dl class="spec">${spec.map((x) => `<div><dt>${esc(x[0])}</dt><dd>${esc(x[1])}</dd></div>`).join('')}</dl>` : ''}
+      ${sat.length ? `<p class="sat">${sat.map((x) => `<span>${esc(x[0])}</span> ${esc(x[1])}`).join(' &nbsp;·&nbsp; ')}</p>` : ''}
+      ${(c.thirds || []).map((t) => `<section><h3>${esc(t[0])}</h3><p>${esc(t[1])}</p></section>`).join('')}
+      ${c.marks && c.marks.length ? `<ul class="marks">${c.marks.map((m) => `<li><span>${esc(m[0])}</span>${dots(m[1])}</li>`).join('')}</ul>` : ''}
+      ${c.verdict ? `<p class="verdict">${esc(c.verdict)}</p>` : ''}
+      <p class="fine"><button class="back" data-go="cigarbox:">&larr; back to the box</button>${c.sample ? ' ' + sample('sample notes') : ''}</p>
+      ${nextLink('smoke', i, n, 'cigars')}
     </article>` };
 }
 
@@ -183,7 +216,8 @@ export function panelFor(group, i, state = {}) {
     case 'manuscript': return manuscript();
     case 'note': return about();
     case 'matchbook': return colophon();
-    case 'cigarbox': return odds();
+    case 'cigarbox': return humidor();
+    case 'smoke': return smoke(i || 0);
     case 'paperback': return paperback();
     case 'phone': return contact(state.rang);
     case 'mapframe': return places();
@@ -191,4 +225,4 @@ export function panelFor(group, i, state = {}) {
   }
   return null;
 }
-export const COUNTS = { rec: POSTS.length, book: SHELVES.length, bottle: BOTTLES.length };
+export const COUNTS = { rec: POSTS.length, book: SHELVES.length, bottle: BOTTLES.length, smoke: CIGARS.length };
