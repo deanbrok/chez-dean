@@ -109,9 +109,16 @@ try {
   $('#err').textContent = 'This room needs WebGL, and your browser would rather not. The door stays locked, for now.';
   throw e;
 }
-const MAXR = Math.min(devicePixelRatio || 1, 2);
-const perf = { ratio: MAXR, acc: 0, n: 0, locked: HASH.flags.has('fixedres'), lowFrames: 0 };
-renderer.setPixelRatio(perf.ratio);
+// Resolution: the display's own density up to 2, but never more pixels than a 4K screen has (a 5K display at full
+// density is twice the work of a laptop screen, and behind the grain nobody can tell), times whatever adapt() has cut.
+const PIXELS = 3840 * 2160;
+const perf = { level: 0, cut: 1, fixed: 0, acc: 0, n: 0, slow: 0, wait: 0, first: 0, locked: HASH.flags.has('fixedres') };
+function ratioNow() {
+  if (perf.fixed) return perf.fixed;
+  const top = Math.min(devicePixelRatio || 1, 2, Math.sqrt(PIXELS / Math.max(1, innerWidth * innerHeight)));
+  return Math.max(Math.min(top, 0.75), +(top * perf.cut).toFixed(2));
+}
+renderer.setPixelRatio(ratioNow());
 renderer.setClearColor(0x050302, 1);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.03, 40);
@@ -938,19 +945,45 @@ function updateStrange(dt, rdt) {
 }
 
 // ---------------------------------------------------------------- frame loop, adaptive resolution
-function resize() { renderer.setSize(innerWidth, innerHeight, false); if (lens) lens.setSize(innerWidth, innerHeight, renderer.getPixelRatio()); updateDial(); }
+function resize() {
+  renderer.setPixelRatio(ratioNow()); renderer.setSize(innerWidth, innerHeight, false);
+  if (lens) lens.setSize(innerWidth, innerHeight, renderer.getPixelRatio()); updateDial();
+}
 addEventListener('resize', resize); resize();
+
+// Adaptive quality. The aim is 60 frames a second, not "better than 30": a page that is a little too heavy for the GPU
+// does not look slow in an average, it stutters, so a step down is taken as soon as frames are being dropped.
+//   level 0  everything            1  lens without multisampling, half the blur taps
+//   2-4      resolution x0.8 each  5  lens without depth of field
+// Frame times are averaged over 1.5 s; two slow averages in a row take one step. If the bottom is reached and frames are
+// no shorter than at the start, the GPU was never the reason (a 30 Hz display, a browser saving energy): everything
+// is put back and left alone.
+const LEVELS = 5, SLOW = 1 / 54;
+const Q0 = lens ? lens.q : 0;                       // phones start one step down (post.js)
+function setLevel(l) {
+  perf.level = l;
+  perf.cut = Math.pow(0.8, Math.min(3, Math.max(0, l - 1)));
+  if (lens) lens.setQuality(Math.min(Q0, l === 0 ? 2 : l < LEVELS ? 1 : 0));
+  resize();
+  perf.acc = perf.n = perf.slow = 0; perf.wait = 20;        // let the new buffers and shaders settle before judging them
+}
+const looksLike = () => (lens ? lens.q : 0) + ':' + renderer.getPixelRatio();
 function adapt(dt) {
   if (perf.locked || frames < 40 || document.hidden) return;
-  perf.acc += dt; perf.n++;
-  if (perf.acc < 2) return;
+  if (perf.wait > 0) { perf.wait--; return; }
+  perf.acc += Math.min(dt, 0.1); perf.n++;                  // one long hitch (a tab switch, a collection) is not a slow GPU
+  if (perf.acc < 1.5) return;
   const avg = perf.acc / perf.n; perf.acc = 0; perf.n = 0;
-  if (avg > 1 / 32) {
-    // too slow: first the lens gives up its expensive parts, then the resolution comes down
-    if (lens && lens.q > 1) { lens.setQuality(1); resize(); }
-    else if (perf.ratio > 0.75) { perf.ratio = Math.max(0.75, +(perf.ratio * 0.8).toFixed(2)); renderer.setPixelRatio(perf.ratio); resize(); }
-    else if (lens && lens.q > 0) { lens.setQuality(0); resize(); }
+  if (avg <= SLOW) { perf.slow = 0; return; }
+  if (++perf.slow < 2) return;
+  if (!perf.first) perf.first = avg;
+  if (perf.level >= LEVELS) {
+    if (avg > perf.first * 0.9) setLevel(0);                // nothing helped: it was not us
+    perf.locked = true; return;
   }
+  const was = looksLike();
+  let l = perf.level;
+  do setLevel(++l); while (l < LEVELS && looksLike() === was);    // some steps change nothing (no lens, a low-density screen)
 }
 
 // ---------------------------------------------------------------- where the lens focuses
@@ -1020,13 +1053,14 @@ window.__poc = {
   skip: (sec) => { clockT += sec; if (SM.on && !SM.hold) SM.t += sec; },     // jump the room's clock forward (slow software-GL screenshots)
   ring: (holdMs) => startRing(holdMs),      // holdMs: keep the line up longer (slow software-GL screenshots)
   moon: (sec) => { moon.need = sec; },
-  res: (r) => { perf.locked = true; perf.ratio = r; renderer.setPixelRatio(r); resize(); },
+  res: (r) => { perf.locked = true; perf.fixed = r; resize(); },
+  level: (l) => { perf.locked = true; setLevel(l); },      // pin an adaptive-quality level (0 everything .. 5 least)
   mouse: (x, y) => { mouse.x = x; mouse.y = y; mouse.last = clockT; },
   hover: (name) => { const it = BY[name]; if (!it) return; pv.copy(it.center).project(camera); hoverAt(((pv.x + 1) / 2) * innerWidth, ((1 - pv.y) / 2) * innerHeight); },
   click: (x, y) => act(open ? null : pick(x, y)),
   info: () => ({
     stop, tween: !!tween, open: open && { group: open.group, index: open.index, slug: open.slug },
-    lens: lens ? lens.info() : null, cat: catPose, frames, ratio: perf.ratio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
+    lens: lens ? lens.info() : null, cat: catPose, frames, ratio: renderer.getPixelRatio(), level: perf.level, calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
     sound: AU.state(), rang, cigar: CIGAR ? { on: SM.on, t: +SM.t.toFixed(2), puffs: SM.puffs, ash: +SM.ash.toFixed(2), held: +CIGAR.held.toFixed(2) } : null, ringing: ring.on, ringAt: ring.at, moon2: moon.on, moonDwell: +moon.dwell.toFixed(1), missing: MISSING,
     homes: Object.fromEntries(ITEMS.map((x) => [x.name, x.stop])), regions: REGIONS.map((r) => r.stop),
   }),

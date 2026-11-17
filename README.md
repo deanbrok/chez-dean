@@ -74,13 +74,52 @@ own with the ashtray (`counter_b`, 1024 px), so a change to the cigar is a four-
 ### The lens
 
 The room is unlit in the browser (all light is baked), so what makes it read as a photograph is
-`site/post.js`. The room is drawn into a multisampled half-float buffer, then: an autofocus that
+`site/post.js`. The room is drawn into a multisampled float buffer, then: an autofocus that
 meters a point per camera stop and racks focus to whatever you pick up; depth of field from real
 distances at half resolution; bloom from a mip chain with a warm halation tint; a little lateral
 chromatic aberration, an optical vignette, a gentle film shoulder and split tone; and animated grain
-with dither. All of its numbers live in `Lens.params`. On slow devices it steps down by itself (no
-MSAA and fewer taps, then lower resolution, then no depth of field). Browsers without half-float
-render targets get the plain bake.
+with dither. All of its numbers live in `Lens.params`. Browsers without float render targets get the
+plain bake.
+
+### Performance
+
+The room itself is cheap (about 50 draw calls, 127k triangles, unlit: around 1 ms on a laptop GPU).
+What a frame costs is the lens, and the lens costs in proportion to the pixels on screen. Measured on
+an M1 Pro (14-inch, 120 Hz) with the window at 1512 x 860, which is 3024 x 1720 real pixels:
+
+| | GPU time per frame | Frames per second |
+|---|---|---|
+| Bare room (`#nolens`) | about 1 ms | 120 |
+| The lens before 17 Nov 2026 | 10.5 ms | 50, uneven |
+| The lens now | 4.5 ms | 100 |
+
+Three things made the difference, and they are the things to keep an eye on when changing `post.js`:
+
+- **Depth of field read too much.** Every one of its 40 taps fetched the full-resolution depth, the
+  focus distance and the full-resolution colour. Now one pass writes the picture at half resolution
+  with each pixel's circle of confusion in the alpha channel, and the blur reads only that: 32 taps,
+  one fetch each.
+- **The multisampled room buffer was too big.** Four samples of RGBA16F at 3024 x 1720 is 166 MB to
+  store and resolve on every frame. It is now packed 11/11/10-bit floats (half the bytes, still room
+  above 1.0 for the bloom, finer steps than the 8-bit textures the room is made of), with two samples
+  per pixel where the screen is dense (pixel ratio 1.5 and up) and four where it is not.
+- **Bloom's largest level was half resolution.** The chain now starts at quarter resolution; the
+  sharpest level is not a buffer at all, the last pass works it out from the half-resolution picture.
+
+**Adaptive quality** (`adapt()` in `site/main.js`) aims at 60 frames a second. Frame times are
+averaged over 1.5 s; two slow averages in a row (below about 54 fps) take one step down: first the
+lens gives up multisampling and half its blur taps, then the resolution comes down in three steps of
+0.8, then depth of field goes. It never steps back up within a visit. If the bottom is reached and
+frames are no shorter than at the start, the GPU was never the limit (a 30 Hz display, a browser
+saving energy), and everything is put back. The resolution is also capped at the pixel count of a
+4K screen, so a 5K display does not do twice the work of a laptop for nothing.
+
+To measure: `__poc.info()` gives the current `level`, `ratio` and the lens's buffer size and sample
+count; `__poc.level(n)` pins a level (0 everything, 5 least), `__poc.res(r)` pins a pixel ratio, and
+`#fixedres` switches the adapting off. Timer queries are useless on Apple GPUs (every pass reports the
+whole frame); what works is rendering N frames in a loop and reading one pixel back at the end
+(`gl.readPixels`), which waits for the GPU, and comparing with one pass left out. Software GL
+(`tools/shot.py`) says nothing about speed.
 
 ## Deploy on Cloudflare with your own domain
 
